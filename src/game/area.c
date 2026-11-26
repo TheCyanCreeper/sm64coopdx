@@ -2,6 +2,7 @@
 
 #include "prevent_bss_reordering.h"
 #include "area.h"
+#include "landscape.h"
 #include "sm64.h"
 #include "gfx_dimensions.h"
 #include "behavior_data.h"
@@ -286,6 +287,8 @@ void load_area(s32 index) {
             load_area_terrain(index, gCurrentArea->terrainData, gCurrentArea->surfaceRooms,
                               gCurrentArea->macroObjects);
         }
+
+        landscape_load(index);
 
         if (gCurrentArea->objectSpawnInfos != NULL) {
             spawn_objects_from_info(0, gCurrentArea->objectSpawnInfos);

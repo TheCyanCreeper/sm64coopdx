@@ -7,6 +7,8 @@
 #include "game/interaction.h"
 #include "game/mario.h"
 #include "game/area.h"
+#include "game/landscape.h"
+#include "level_table.h"
 #include "audio/external.h"
 #include "engine/surface_collision.h"
 #include "engine/math_util.h"
@@ -234,6 +236,11 @@ void network_send_player(u8 localIndex) {
     packet_init(&p, PACKET_PLAYER, false, PLMT_AREA);
     packet_write(&p, &gNetworkPlayers[localIndex].globalIndex, sizeof(u8));
     packet_write(&p, &data, sizeof(struct PacketPlayerData));
+    if (gCurrLevelNum == LEVEL_CASTLE_GROUNDS && gCurrAreaIndex == 2) {
+        s64 origin[2];
+        landscape_get_origin(origin);
+        packet_write(&p, origin, sizeof(origin));
+    }
     network_send(&p);
 }
 
@@ -296,6 +303,14 @@ void network_receive_player(struct Packet* p) {
                       &heldSyncID, &heldBySyncID,
                       &riddenSyncID, &interactSyncID,
                       &usedSyncID, &platformSyncID);
+
+    if (gCurrLevelNum == LEVEL_CASTLE_GROUNDS && gCurrAreaIndex == 2) {
+        s64 origin[2] = {0};
+        packet_read(p, origin, sizeof(origin));
+        landscape_relative_position(m->pos, origin);
+        m->marioObj->oPosX = m->pos[0];
+        m->marioObj->oPosZ = m->pos[2];
+    }
 
     // read custom flags
     m->freeze = GET_BIT(customFlags, 0);

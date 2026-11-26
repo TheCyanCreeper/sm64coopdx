@@ -38,6 +38,8 @@ extern const struct MovtexQuadCollection castle_grounds_movtex_water[];
 extern Movtex castle_grounds_movtex_tris_waterfall[];
 extern const Gfx castle_grounds_dl_waterfall[];
 
+extern const GeoLayout castle_landscape_geo[];
+
 // script
 extern const LevelScript level_castle_grounds_entry[];
 

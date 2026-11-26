@@ -7,6 +7,7 @@
 #include "dialog_ids.h"
 #include "audio/external.h"
 #include "level_update.h"
+#include "landscape.h"
 #include "game_init.h"
 #include "level_update.h"
 #include "main.h"
@@ -1310,6 +1311,7 @@ s32 play_mode_normal(void) {
     }
 
     warp_area();
+    landscape_update();
     check_instant_warp();
 
     if (sTimerRunning) {
