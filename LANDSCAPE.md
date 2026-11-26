@@ -1,6 +1,6 @@
 # Castle Grounds expedition
 
-Peach's Castle and its original grounds occupy a fixed patch of the endless landscape. Climb the grassy banks around the lawn and walk over the crest into the wilderness. A continuous grass mesh joins the original perimeter to the streaming ground in the same area. The castle doors, moat and original actors use the stock level data.
+Peach's Castle and its original grounds occupy a fixed patch of the endless landscape. Climb the grassy banks around the lawn and walk over the crest into the wilderness. A continuous grass mesh joins the original perimeter to the streaming ground in the same area. The rear courtyard shares the grounds. Follow either stone causeway over its east or west wall, or take the rear hall door from inside the castle. The courtyard fountain, trees, signs, and Big Boo’s Haunt entrance occupy the garden behind the main roof.
 
 Beyond the home meadow, temperature varies over roughly 41,000-unit intervals and grove density over 24,600-unit intervals. Terrain height, textures and vegetation blend between regions. Broad landings and ridges use a slope profile sampled from the castle lawn. Steeper wilderness faces show the original outdoor rock texture. The seed fixes the locations of outcrops, groves and encounters.
 

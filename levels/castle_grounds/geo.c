@@ -18,4 +18,5 @@
 #include "levels/castle_grounds/areas/1/7/geo.inc.c"
 #include "levels/castle_grounds/areas/1/8/geo.inc.c"
 #include "game/landscape.h"
+#include "levels/castle_courtyard/header.h"
 #include "levels/castle_grounds/areas/1/geo.inc.c"

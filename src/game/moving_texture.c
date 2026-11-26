@@ -3,6 +3,8 @@
 #include "sm64.h"
 #include "moving_texture.h"
 #include "area.h"
+#include "landscape.h"
+#include "level_table.h"
 #include "camera.h"
 #include "rendering_graph_node.h"
 #include "engine/math_util.h"
@@ -672,6 +674,11 @@ Gfx *geo_movtex_draw_water_regions(s32 callContext, struct GraphNode *node, UNUS
             if (((i+1)*6) >= gEnvironmentRegionsLength) { break; }
             s16 waterId = gEnvironmentRegions[i * 6 + 1];
             s16 waterY = gEnvironmentRegions[i * 6 + 6];
+            if (gCurrLevelNum == LEVEL_CASTLE_GROUNDS && asGenerated->parameter == CASTLE_COURTYARD_MOVTEX_STAR_STATUE_WATER) {
+                if (waterId != COURT_WATER_ID) continue;
+                waterId = 0;
+                waterY -= COURT_Y;
+            }
             Gfx *subList = movtex_gen_quads_id(waterId, waterY, quadCollection);
             if (subList != NULL) {
                 gSPDisplayList(gfx++, VIRTUAL_TO_PHYSICAL(subList));

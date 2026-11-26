@@ -1,6 +1,7 @@
 #include <PR/ultratypes.h>
 
 #include "area.h"
+#include "landscape.h"
 #include "engine/math_util.h"
 #include "engine/lighting_engine.h"
 #include "data/dynos_cmap.cpp.h"
@@ -1609,6 +1610,10 @@ static void geo_process_object(struct Object *node) {
             mtxf_mul(gMatStackPrev[gMatStackIndex + 1], mtxf, gMatStackPrev[gMatStackIndex]);
         }
 
+        if (node->unused1 == LANDSCAPE_HOME_ACTOR) {
+            landscape_anchor_actor(gMatStack[gMatStackIndex + 1], gMatStack[gMatStackIndex]);
+            landscape_anchor_actor(gMatStackPrev[gMatStackIndex + 1], gMatStackPrev[gMatStackIndex]);
+        }
         if (gGlobalTimer == node->header.gfx.prevScaleTimestamp + 1 &&
             gGlobalTimer != node->header.gfx.skipInterpolationTimestamp &&
             gGlobalTimer != gLakituState.skipCameraInterpolationTimestamp) {

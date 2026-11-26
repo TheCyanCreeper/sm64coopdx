@@ -13,6 +13,7 @@
 
 #include "actors/common1.h"
 #include "actors/group7.h"
+#include "actors/group9.h"
 #include "actors/group14.h"
 #include "levels/hmc/header.h"
 #include "levels/ccm/header.h"
@@ -131,7 +132,38 @@ const LevelScript level_castle_grounds_entry[] = {
     LOAD_MODEL_FROM_GEO(MODEL_CCM_SNOW_TREE, snow_tree_geo),
     LOAD_MODEL_FROM_GEO(MODEL_SSL_PALM_TREE, palm_tree_geo),
 
+    LOAD_MODEL_FROM_GEO(MODEL_GROUNDS_BOO, boo_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_HAUNTED_CAGE, haunted_cage_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_COURTYARD_SPIKY_TREE, spiky_tree_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_COURTYARD_WOODEN_DOOR, wooden_door_geo),
     AREA(/*index*/ 1, castle_grounds_geo_00073C),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, 2272, COURT_Y + (-214), COURT_Z + (-1432), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, 818, COURT_Y + (10), COURT_Z + (203), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, -820, COURT_Y + (10), COURT_Z + (201), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, 1681, COURT_Y + (-214), COURT_Z + (-132), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, 2382, COURT_Y + (-214), COURT_Z + (-843), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, -817, COURT_Y + (10), COURT_Z + (-3630), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, 2769, COURT_Y + (-214), COURT_Z + (-1523), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, 2444, COURT_Y + (-214), COURT_Z + (-2330), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, 2042, COURT_Y + (-214), COURT_Z + (-3032), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, 824, COURT_Y + (10), COURT_Z + (-3633), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, -2537, COURT_Y + (-214), COURT_Z + (-759), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, -1640, COURT_Y + (-214), COURT_Z + (-3228), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, -2732, COURT_Y + (-214), COURT_Z + (-2166), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, -2446, COURT_Y + (-214), COURT_Z + (-1786), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, -2820, COURT_Y + (-214), COURT_Z + (-1317), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_SPIKY_TREE, -1868, COURT_Y + (-214), COURT_Z + (-45), 0, 0, 0, 0, bhvTree),
+        OBJECT(MODEL_COURTYARD_WOODEN_DOOR, 0, COURT_Y, COURT_Z + 461, 0, 0, 0, 0x00300000, bhvDoorWarp),
+        WARP_NODE(0x30, LEVEL_CASTLE, 1, 0x02, WARP_NO_CHECKPOINT),
+        OBJECT(MODEL_GROUNDS_BOO, -3217, COURT_Y + 100, COURT_Z - 101, 0, 0, 0, 0, bhvCourtyardBooTriplet),
+        OBJECT(MODEL_GROUNDS_BOO, 3317, COURT_Y + 100, COURT_Z - 1701, 0, 0, 0, 0, bhvCourtyardBooTriplet),
+        OBJECT(MODEL_GROUNDS_BOO, -71, COURT_Y + 1, COURT_Z - 1387, 0, 0, 0, 0, bhvCourtyardBooTriplet),
+        OBJECT(MODEL_GROUNDS_BOO, -2360, COURT_Y - 100, COURT_Z - 2712, 0, 0, 0, 0x01310000, bhvBooWithCage),
+        WARP_NODE(0x31, LEVEL_BBH, 1, 0x0A, WARP_NO_CHECKPOINT),
+        OBJECT(MODEL_NONE, 0, COURT_Y + 51, COURT_Z - 1000, 0, 180, 0, 0x00320000, bhvLaunchStarCollectWarp),
+        OBJECT(MODEL_NONE, 0, COURT_Y + 51, COURT_Z - 1000, 0, 180, 0, 0x00330000, bhvLaunchDeathWarp),
+        WARP_NODE(0x32, LEVEL_CASTLE_GROUNDS, 1, 0x32, WARP_NO_CHECKPOINT),
+        WARP_NODE(0x33, LEVEL_CASTLE_GROUNDS, 1, 0x33, WARP_NO_CHECKPOINT),
         WARP_NODE(/*id*/ 0xF1, /*destLevel*/ LEVEL_CASTLE_GROUNDS, /*destArea*/ 0x01, /*destNode*/ 0x03, /*flags*/ WARP_NO_CHECKPOINT),
         JUMP_LINK(script_func_local_1),
         JUMP_LINK(script_func_local_2),

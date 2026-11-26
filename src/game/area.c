@@ -294,6 +294,13 @@ void load_area(s32 index) {
             spawn_objects_from_info(0, gCurrentArea->objectSpawnInfos);
         }
 
+        if (gCurrLevelNum == LEVEL_CASTLE_GROUNDS && index == 1) {
+            for (int i = 0; i < OBJECT_POOL_CAPACITY; i++) {
+                struct Object *o = &gObjectPool[i];
+                if (o->activeFlags && o->behavior != bhvMario && o->header.gfx.areaIndex == index)
+                    o->unused1 = LANDSCAPE_HOME_ACTOR;
+            }
+        }
         load_obj_warp_nodes();
         geo_call_global_function_nodes(&gCurrentArea->root->node, GEO_CONTEXT_AREA_LOAD);
     }

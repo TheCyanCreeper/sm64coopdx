@@ -18,6 +18,8 @@
 #include "engine/surface_load.h"
 #include "pc/lua/utils/smlua_collision_utils.h"
 #include "landscape.h"
+#include "levels/castle_courtyard/header.h"
+#include "macro_special_objects.h"
 
 // Keep native s16 vertices and the collision partition near Mario. Global cell
 // coordinates survive each origin shift and drive both vegetation and terrain.
@@ -105,36 +107,129 @@ static struct Climate sample(s64 x, s64 z) {
                                    * ((broad - .45) * (1280 + ice * 1950)
                                       + (bench - .45) * (420 + 510 * sand)
                                       + ridge * ridge * (280 + 820 * ice)) };
+    double pad = smooth((10 - fabs((double) x)) / 3) * smooth((-z - 14.) / 2) * smooth((29. + z) / 4);
+    c.height = lerp(c.height, COURT_Y - 232, pad);
     return c;
 }
+struct TerrainVertex {
+    struct Climate climate;
+    double shade;
+    u8 stone;
+};
+static struct TerrainVertex terrain_vertex(s64 x, s64 z) {
+    double sx = (sample(x + 1, z).height - sample(x - 1, z).height) / (2 * CELL);
+    double sz = (sample(x, z + 1).height - sample(x, z - 1).height) / (2 * CELL);
+    return (struct TerrainVertex) {
+        sample(x, z), .64 + .36 * fmax(0, (.82 - .48 * sx - .31 * sz) / sqrt(1 + sx * sx + sz * sz)),
+        215 * smooth((hypot(sx, sz) - .32) / .38)
+    };
+}
+static int paint_vertex(Vtx *v, Vec3s pos, int u, int t, int pass, const struct TerrainVertex *point) {
+    struct Climate c = point->climate;
+    int alpha = pass == 3   ? point->stone
+                : pass == 2 ? 255 * (1 - c.ice - c.sand)
+                : pass == 1 ? 255 * smooth(c.ice * 8)
+                            : 255;
+    double woods = pass == 2 ? c.woods : 0;
+    make_vertex(v, 0, pos[0], pos[1], pos[2], u, t, (255 - 87 * woods) * point->shade,
+                (255 - 47 * woods) * point->shade, (255 - 65 * woods) * point->shade, alpha);
+    return alpha;
+}
+static const u8 *terrain_texture(int pass) {
+    const u8 *textures[] = { generic_09002800, snow_09008800, outside_09003800, generic_09003000 };
+    return textures[pass];
+}
+// Keep a terrain backdrop around the landmark after the collision window
+// moves away. Tiles share the streaming grid's boundary vertices and UVs.
+enum {
+    BACK_RADIUS = 48,
+    TILE = 4,
+    BACK_SIDE = BACK_RADIUS * 2 / TILE,
+    BACK_COUNT = BACK_SIDE * BACK_SIDE
+};
+static Vtx backVertices[4][BACK_COUNT][40];
+static Gfx backTiles[4][BACK_COUNT][21], backList[4][BACK_COUNT + 32];
+static u8 backVisible[4][BACK_COUNT];
+static void build_backdrop(void) {
+    for (int tz = 0; tz < BACK_SIDE; tz++)
+        for (int tx = 0; tx < BACK_SIDE; tx++) {
+            int tile = tz * BACK_SIDE + tx, x = tx * TILE - BACK_RADIUS, z = tz * TILE - BACK_RADIUS;
+            if (x >= -HOME && x < HOME && z >= -HOME && z < HOME)
+                continue;
+            struct TerrainVertex grid[TILE + 1][TILE + 1];
+            for (int dz = 0; dz <= TILE; dz++)
+                for (int dx = 0; dx <= TILE; dx++)
+                    grid[dz][dx] = terrain_vertex(x + dx, z + dz);
+            for (int pass = 0; pass < 4; pass++) {
+                Gfx *dl = backTiles[pass][tile];
+                int visible = 0;
+                for (int row = 0; row < TILE; row++) {
+                    for (int k = 0; k < 10; k++) {
+                        int dx = k / 2, dz = row + (k & 1);
+                        struct TerrainVertex *p = &grid[dz][dx];
+                        Vec3s pos = { (x + dx) * CELL, lround(p->climate.height), (z + dz) * CELL };
+                        visible |= paint_vertex(&backVertices[pass][tile][row * 10 + k], pos, dx * 2048,
+                                                dz * 2048, pass, p);
+                    }
+                    gSPVertex(dl++, &backVertices[pass][tile][row * 10], 10, 0);
+                    for (int k = 0; k < 8; k += 2)
+                        gSP2Triangles(dl++, k, k + 1, k + 2, 0, k + 2, k + 1, k + 3, 0);
+                }
+                gSPEndDisplayList(dl++);
+                backVisible[pass][tile] = visible;
+            }
+        }
+}
+static void select_backdrop(void) {
+    for (int pass = 0; pass < 4; pass++) {
+        Gfx *dl = backList[pass];
+        gDPPipeSync(dl++);
+        gSPClearGeometryMode(dl++, G_LIGHTING | G_CULL_BACK);
+        gDPSetCombineMode(dl++, G_CC_MODULATERGBA, G_CC_MODULATERGBA);
+        gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_ON);
+        const u8 *texture = terrain_texture(pass);
+        gDPLoadTextureBlock(dl++, texture, G_IM_FMT_RGBA, G_IM_SIZ_16b, 32, 32, 0, G_TX_WRAP, G_TX_WRAP,
+                            5, 5, G_TX_NOLOD, G_TX_NOLOD);
+        for (int tz = 0; tz < BACK_SIDE; tz++)
+            for (int tx = 0; tx < BACK_SIDE; tx++) {
+                int x = tx * TILE - BACK_RADIUS, z = tz * TILE - BACK_RADIUS;
+                if (x >= centerX - SIDE / 2 && x < centerX + SIDE / 2 && z >= centerZ - SIDE / 2
+                    && z < centerZ + SIDE / 2)
+                    continue;
+                int tile = tz * BACK_SIDE + tx;
+                if (backVisible[pass][tile])
+                    gSPDisplayList(dl++, backTiles[pass][tile]);
+            }
+        gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_OFF);
+        gSPSetGeometryMode(dl++, G_LIGHTING | G_CULL_BACK);
+        gDPSetCombineMode(dl++, G_CC_SHADE, G_CC_SHADE);
+        gSPEndDisplayList(dl++);
+    }
+}
+Gfx *geo_landscape_backdrop(s32 context, struct GraphNode *node, UNUSED Mat4 matrix) {
+    if (context != GEO_CONTEXT_RENDER)
+        return NULL;
+    int pass = ((struct GraphNodeGenerated *) node)->parameter;
+    node->flags = (node->flags & 0xff) | ((pass ? LAYER_TRANSPARENT_DECAL : LAYER_OPAQUE) << 8);
+    return backList[pass];
+}
 static void build(void) {
-    struct Climate climate[ROW * ROW];
-    double lighting[ROW * ROW];
-    u8 rock[ROW * ROW];
+    select_backdrop();
+    struct TerrainVertex points[ROW * ROW];
     for (int z = 0; z < ROW; z++)
         for (int x = 0; x < ROW; x++) {
             int k = z * ROW + x;
-            climate[k] = sample(centerX + x - SIDE / 2, centerZ + z - SIDE / 2);
-            s64 wx = centerX + x - SIDE / 2, wz = centerZ + z - SIDE / 2;
-            double sx = (sample(wx + 1, wz).height - sample(wx - 1, wz).height) / (2 * CELL);
-            double sz = (sample(wx, wz + 1).height - sample(wx, wz - 1).height) / (2 * CELL);
-            lighting[k] =
-                .64 + .36 * fmax(0, (.82 - .48 * sx - .31 * sz) / sqrt(1 + sx * sx + sz * sz));
-            rock[k] = 215 * smooth((hypot(sx, sz) - .32) / .38);
-            heights[k] = lround(climate[k].height);
-            snow[k] = climate[k].ice > .65;
+            points[k] = terrain_vertex(centerX + x - SIDE / 2, centerZ + z - SIDE / 2);
+            heights[k] = lround(points[k].climate.height);
+            snow[k] = points[k].climate.ice > .65;
         }
-
     for (int pass = 0; pass < 4; pass++) {
         Gfx *dl = lists[pass];
         gDPPipeSync(dl++);
-        gSPClearGeometryMode(dl++, G_LIGHTING);
+        gSPClearGeometryMode(dl++, G_LIGHTING | G_CULL_BACK);
         gDPSetCombineMode(dl++, G_CC_MODULATERGBA, G_CC_MODULATERGBA);
         gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_ON);
-        const u8 *texture = pass == 3   ? outside_0900A800
-                            : pass == 2 ? outside_09003800
-                            : pass == 1 ? snow_09008800
-                                        : generic_09002800;
+        const u8 *texture = terrain_texture(pass);
         gDPLoadTextureBlock(dl++, texture, G_IM_FMT_RGBA, G_IM_SIZ_16b, 32, 32, 0, G_TX_WRAP, G_TX_WRAP,
                             5, 5, G_TX_NOLOD, G_TX_NOLOD);
         for (int z = 0; z < SIDE; z++)
@@ -156,22 +251,11 @@ static void build(void) {
                 int visible = 0;
                 for (int corner = 0; corner < 4; corner++) {
                     int dx = corner & 1, dz = corner >> 1, n = k + dx + dz * ROW;
-                    struct Climate c = climate[n];
                     p[corner][0] = (wx + dx - originX) * CELL;
                     p[corner][1] = heights[n];
                     p[corner][2] = (wz + dz - originZ) * CELL;
-                    double shade = lighting[n];
-                    int r = pass == 2 ? 255 - 87 * c.woods : 255;
-                    int g = pass == 2 ? 255 - 47 * c.woods : 255;
-                    int b = pass == 2 ? 255 - 65 * c.woods : 255;
-                    int alpha = pass == 3   ? rock[n]
-                                : pass == 2 ? 255 * (1 - c.ice - c.sand)
-                                : pass == 1 ? 255 * smooth(c.ice * 8)
-                                            : 255;
-                    visible |= alpha;
-                    make_vertex(vertices[pass], cell * 4 + corner, p[corner][0], p[corner][1],
-                                p[corner][2], dx * 2048, dz * 2048, r * shade, g * shade, b * shade,
-                                alpha);
+                    visible |= paint_vertex(&vertices[pass][cell * 4 + corner], p[corner], dx * 2048,
+                                            dz * 2048, pass, &points[n]);
                 }
                 if (!pass && !g->tri[0]) {
                     g->x = wx;
@@ -188,7 +272,7 @@ static void build(void) {
                 gSP2Triangles(dl++, 0, 2, 1, 0, 1, 2, 3, 0);
             }
         gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_OFF);
-        gSPSetGeometryMode(dl++, G_LIGHTING);
+        gSPSetGeometryMode(dl++, G_LIGHTING | G_CULL_BACK);
         gDPSetCombineMode(dl++, G_CC_SHADE, G_CC_SHADE);
         gSPEndDisplayList(dl++);
     }
@@ -209,7 +293,7 @@ static bool live(struct Site *s, int i) {
 }
 static void place(struct Site *s, int slot, int model, const BehaviorScript *bhv, s64 x, s64 z,
                   float scale) {
-    if (authored(x, z))
+    if (authored(x, z) || (llabs(x) < 14 && z >= -25 && z <= -14))
         return;
     int lx = (x - originX) * CELL, lz = (z - originZ) * CELL;
     float y = !originX && !originZ && llabs(x) <= HOME && llabs(z) <= HOME
@@ -359,6 +443,13 @@ static void build_home_rim(void) {
         float inner = edge - 96 - 2600 * approach, innerY = 260, edgeY = 260;
         stock_floor(inner * ux, inner * uz, &innerY);
         stock_floor((edge - 3) * ux, (edge - 3) * uz, &edgeY);
+        // The north ray hits the castle roof. Route the terrain below the
+        // rear facade, at the garden foundation, instead of across the roof.
+        if (edgeZ == -HOME * CELL) {
+            double rear = smooth((4550 - fabs(edge * ux)) / 850);
+            edgeY = lerp(edgeY, COURT_Y - 245, rear);
+            innerY = lerp(innerY, COURT_Y - 245, rear);
+        }
         int gx = (int) floor((double) edgeX / CELL), gz = (int) floor((double) edgeZ / CELL);
         double u = (double) edgeX / CELL - gx, v = (double) edgeZ / CELL - gz;
         double farY =
@@ -369,12 +460,12 @@ static void build_home_rim(void) {
             double r = j ? lerp(edge, length, t) : inner;
             rim[i][j][0] = lround(ux * r);
             rim[i][j][2] = lround(uz * r);
-            rim[i][j][1] = lround(j ? lerp(edgeY - 2, farY, t) : innerY - 4);
+            rim[i][j][1] = lround(j ? lerp(edgeY, farY, t) : innerY - 28);
         }
     }
     Gfx *dl = rimList;
     gDPPipeSync(dl++);
-    gSPClearGeometryMode(dl++, G_LIGHTING);
+    gSPClearGeometryMode(dl++, G_LIGHTING | G_CULL_BACK);
     gDPSetCombineMode(dl++, G_CC_MODULATERGBA, G_CC_MODULATERGBA);
     gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_ON);
     gDPLoadTextureBlock(dl++, outside_09003800, G_IM_FMT_RGBA, G_IM_SIZ_16b, 32, 32, 0, G_TX_WRAP,
@@ -393,14 +484,193 @@ static void build_home_rim(void) {
             }
             smlua_collision_add_surface(false, SURFACE_NOT_SLIPPERY, *p[0], *p[1], *p[2]);
             smlua_collision_add_surface(false, SURFACE_NOT_SLIPPERY, *p[1], *p[3], *p[2]);
+            // Keep the collision overlap for walking. Only draw the inner strip
+            // where it forms the northeast ascent, avoiding coplanar grass.
+            if (!j && rim[i][0][2] - rim[i][1][2] < 96 && rim[next][0][2] - rim[next][1][2] < 96) {
+                // A short skirt closes the sub-cell difference at the stock edge.
+                for (int k = 0; k < 2; k++) {
+                    Vtx *v = &rimVertices[base + k];
+                    Vtx edge = rimVertices[base + k + 2];
+                    // Tuck the skirt into the bank to cover bends between samples.
+                    for (int axis = 0; axis <= 2; axis += 2)
+                        v->v.ob[axis] = (edge.v.ob[axis] + v->v.ob[axis]) / 2;
+                    v->v.ob[1] = edge.v.ob[1] - 100;
+                }
+            }
             gSPVertex(dl++, &rimVertices[base], 4, 0);
             gSP2Triangles(dl++, 0, 1, 2, 0, 1, 3, 2, 0);
         }
     gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_OFF);
-    gSPSetGeometryMode(dl++, G_LIGHTING);
+    gSPSetGeometryMode(dl++, G_LIGHTING | G_CULL_BACK);
     gDPSetCombineMode(dl++, G_CC_SHADE, G_CC_SHADE);
     gSPEndDisplayList(dl++);
 }
+// The native courtyard mesh and its collision share this translation with the
+// door, fountain and garden actors. Ground stays resident across origin shifts.
+static Vec3s foundation[128][2];
+static int foundationCount;
+static Vtx foundationVertices[128 * 4];
+static Vtx courtPathVertices[2 * 3 * 4];
+static Vtx towerVertices[2][8][5];
+static Vtx pathSides[2 * 3 * 2 * 4];
+static Gfx courtPathList[160 + 2 * 128];
+static s16 courtWater[1 + 6 * 20];
+static s16 courtSigns[4 * 5 + 1];
+
+static void load_courtyard(void) {
+    foundationCount = 0;
+    const Collision *vertices = castle_courtyard_seg7_collision + 2;
+    const Collision *data = vertices + 3 * castle_courtyard_seg7_collision[1];
+    while (*data != TERRAIN_LOAD_CONTINUE) {
+        s16 type = *data++, count = *data++;
+        for (int i = 0; i < count; i++) {
+            Vec3s p[3];
+            for (int k = 0; k < 3; k++) {
+                const Collision *v = vertices + 3 * *data++;
+                p[k][0] = v[0];
+                p[k][1] = v[1] + COURT_Y;
+                p[k][2] = v[2] + COURT_Z;
+            }
+            smlua_collision_add_surface(false, type, p[0], p[1], p[2]);
+            // Extend the lower edges of the tall courtyard walls to the terrain.
+            for (int k = 0; k < 3; k++) {
+                s16 *a = p[k], *b = p[(k + 1) % 3], *c = p[(k + 2) % 3];
+                if (a[1] <= COURT_Y + 20 && b[1] <= COURT_Y + 20 && c[1] > COURT_Y + 500
+                    && foundationCount < 128) {
+                    memcpy(foundation[foundationCount][0], a, sizeof(Vec3s));
+                    memcpy(foundation[foundationCount++][1], b, sizeof(Vec3s));
+                }
+            }
+            if (surface_has_force(type))
+                data++;
+        }
+    }
+    // Give the fountain its own water ID alongside the original moat boxes.
+    if (gEnvironmentRegions && gEnvironmentRegions[0] < 20) {
+        int n = gEnvironmentRegionsLength;
+        memcpy(courtWater, gEnvironmentRegions, n * sizeof(s16));
+        s16 box[] = { COURT_WATER_ID, -656, COURT_Z - 2405, 674, COURT_Z - 1074, COURT_Y + 51 };
+        memcpy(courtWater + n, box, sizeof(box));
+        gEnvironmentLevels[courtWater[0]++] = COURT_Y + 51;
+        gEnvironmentRegionsLength += 6;
+        gEnvironmentRegions = courtWater;
+    }
+    memcpy(courtSigns, castle_courtyard_seg7_macro_objs, sizeof(courtSigns));
+    for (int i = 0; i < 4; i++) {
+        courtSigns[i * 5 + 2] += COURT_Y;
+        courtSigns[i * 5 + 3] += COURT_Z;
+    }
+    spawn_macro_objects(1, courtSigns);
+}
+
+static void build_court_paths(void) {
+    Gfx *dl = courtPathList;
+    gDPPipeSync(dl++);
+    gSPClearGeometryMode(dl++, G_LIGHTING | G_CULL_BACK);
+    gDPSetCombineMode(dl++, G_CC_MODULATERGBA, G_CC_MODULATERGBA);
+    gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_ON);
+    gDPLoadTextureBlock(dl++, outside_0900A000, G_IM_FMT_RGBA, G_IM_SIZ_16b, 32, 32, 0, G_TX_WRAP,
+                        G_TX_WRAP, 5, 5, G_TX_NOLOD, G_TX_NOLOD);
+    for (int i = 0; i < foundationCount; i++) {
+        for (int k = 0; k < 4; k++) {
+            s16 *p = foundation[i][k & 1];
+            make_vertex(foundationVertices, 4 * i + k, p[0], p[1] - (k >> 1) * 2300, p[2],
+                        (k & 1)
+                            * (int) hypot(foundation[i][0][0] - foundation[i][1][0],
+                                          foundation[i][0][2] - foundation[i][1][2])
+                            * 3,
+                        (k >> 1) * 6900, 190, 190, 190, 255);
+        }
+        gSPVertex(dl++, &foundationVertices[4 * i], 4, 0);
+        gSP2Triangles(dl++, 0, 1, 2, 0, 1, 3, 2, 0);
+    }
+    for (int side = 0; side < 2; side++) {
+        int sign = side ? 1 : -1;
+        // End the bridge on grid vertices so both ends meet the actual floor.
+        int x[] = { 1792, 3392, 3776, 6656 };
+        for (int j = 0; j < 3; j++) {
+            Vec3s p[4];
+            int base = (side * 3 + j) * 4;
+            for (int k = 0; k < 4; k++) {
+                int n = j + (k >> 1), z = -10752 + 512 * (k & 1);
+                int wx = sign * x[n];
+                int y = n == 0   ? COURT_Y - 205
+                        : n == 3 ? lround(sample(wx / CELL, z / CELL).height) - 2
+                                 : COURT_Y + 838;
+                p[k][0] = wx;
+                p[k][1] = y;
+                p[k][2] = z;
+                make_vertex(courtPathVertices, base + k, wx, y, z, (k >> 1) * (x[j + 1] - x[j]) * 3,
+                            (k & 1) * 1536, 224, 224, 224, 255);
+            }
+            int a = side ? 1 : 2, b = 3 - a;
+            smlua_collision_add_surface(false, SURFACE_NOT_SLIPPERY, p[0], p[a], p[b]);
+            smlua_collision_add_surface(false, SURFACE_NOT_SLIPPERY, p[b], p[a], p[3]);
+            for (int edge = 0; edge < 2; edge++) {
+                int first = (base / 4 * 2 + edge) * 4;
+                for (int k = 0; k < 4; k++) {
+                    s16 *v = p[edge + (k & 1) * 2];
+                    make_vertex(pathSides, first + k, v[0], v[1] - (k >> 1) * 1300, v[2],
+                                (k & 1) * (x[j + 1] - x[j]) * 3, (k >> 1) * 3900, 170, 170, 170, 255);
+                }
+                gSPVertex(dl++, &pathSides[first], 4, 0);
+                gSP2Triangles(dl++, 0, 1, 2, 0, 1, 3, 2, 0);
+            }
+            gSPVertex(dl++, &courtPathVertices[base], 4, 0);
+            gSP2Triangles(dl++, 0, a, b, 0, b, a, 3, 0);
+        }
+    }
+    // The enclosed original set has only the inward-facing tower panels.
+    // Fit complete octagonal masonry and roof caps around their footprint.
+    static const s16 ring[8][2] = { { -215, -532 }, { 215, -532 }, { 532, -215 }, { 532, 215 },
+                                    { 215, 532 },   { -215, 532 }, { -532, 215 }, { -532, -215 } };
+    for (int roof = 0; roof <= 1; roof++) {
+        if (roof) {
+            gDPLoadTextureBlock(dl++, outside_09007800, G_IM_FMT_RGBA, G_IM_SIZ_16b, 32, 32, 0,
+                                G_TX_WRAP, G_TX_WRAP, 5, 5, G_TX_NOLOD, G_TX_NOLOD);
+        } else {
+            gDPLoadTextureBlock(dl++, outside_09006800, G_IM_FMT_RGBA, G_IM_SIZ_16b, 64, 32, 0,
+                                G_TX_WRAP, G_TX_WRAP, 6, 5, G_TX_NOLOD, G_TX_NOLOD);
+        }
+        for (int side = 0; side < 2; side++)
+            for (int e = 0; e < 8; e++) {
+                int cx = side ? 3584 : -3583, cz = COURT_Z - 3583;
+                Vtx *v = towerVertices[side][e];
+                Vec3s p[5];
+                for (int k = 0; k < 5; k++) {
+                    int n = (e + (k & 1)) % 8;
+                    p[k][0] = cx + (k == 4 ? 0 : ring[n][0]);
+                    p[k][2] = cz + (k == 4 ? 0 : ring[n][1]);
+                    p[k][1] = COURT_Y + (k == 4 ? 2450 : k >= 2 ? 2052 : -1350);
+                    make_vertex(v, k, p[k][0], p[k][1], p[k][2], k == 4 ? 512 : (k & 1) * 1024,
+                                k == 4  ? -1024
+                                : k < 2 ? 8192
+                                        : 0,
+                                192 + 5 * (e % 5), 192 + 5 * (e % 5), 192 + 5 * (e % 5), 255);
+                }
+                gSPVertex(dl++, v, 5, 0);
+                if (roof) {
+                    gSP1Triangle(dl++, 2, 4, 3, 0);
+                    smlua_collision_add_surface(false, SURFACE_NOT_SLIPPERY, p[2], p[4], p[3]);
+                } else {
+                    gSP2Triangles(dl++, 0, 2, 1, 0, 1, 2, 3, 0);
+                    smlua_collision_add_surface(false, SURFACE_DEFAULT, p[0], p[2], p[1]);
+                    smlua_collision_add_surface(false, SURFACE_DEFAULT, p[1], p[2], p[3]);
+                }
+            }
+    }
+    gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_OFF);
+    gSPSetGeometryMode(dl++, G_LIGHTING | G_CULL_BACK);
+    gDPSetCombineMode(dl++, G_CC_SHADE, G_CC_SHADE);
+    gSPEndDisplayList(dl++);
+}
+Gfx *geo_landscape_court_path(s32 context, struct GraphNode *node, UNUSED Mat4 matrix) {
+    if (context != GEO_CONTEXT_RENDER)
+        return NULL;
+    node->flags = (node->flags & 0xff) | (LAYER_OPAQUE << 8);
+    return courtPathList;
+}
+
 Gfx *geo_landscape_rim(s32 context, struct GraphNode *node, UNUSED Mat4 mtx) {
     if (context != GEO_CONTEXT_RENDER)
         return NULL;
@@ -432,7 +702,10 @@ void landscape_load(s32 area) {
             homeHeight[z + HOME][x + HOME] =
                 floor && floor->type != SURFACE_DEATH_PLANE ? (s16) y : -11000;
         }
+    build_backdrop();
     build_home_rim();
+    load_courtyard();
+    build_court_paths();
     build();
 }
 
@@ -481,7 +754,28 @@ void landscape_update(void) {
 
 Gfx *geo_landscape_home(s32 context, struct GraphNode *node, UNUSED Mat4 matrix) {
     if (context == GEO_CONTEXT_RENDER)
-        ((struct GraphNodeSwitchCase *) node)->selectedCase = (originX || originZ) ? 1 : 0;
+        ((struct GraphNodeSwitchCase *) node)->selectedCase =
+            (llabs(originX) > 63 || llabs(originZ) > 63) ? 1 : 0;
+    return NULL;
+}
+
+// Level actors simulate in authored coordinates. Translate their render matrix
+// with the landmark while the streaming window uses a shifted origin.
+void landscape_anchor_actor(Mat4 matrix, Mat4 parent) {
+    if (!originX && !originZ)
+        return;
+    float x = fmax(-100000., fmin(100000., (double) originX * CELL));
+    float z = fmax(-100000., fmin(100000., (double) originZ * CELL));
+    for (int i = 0; i < 3; i++)
+        matrix[3][i] -= x * parent[0][i] + z * parent[2][i];
+}
+
+Gfx *geo_landscape_home_offset(s32 context, struct GraphNode *node, UNUSED Mat4 matrix) {
+    if (context == GEO_CONTEXT_RENDER) {
+        struct GraphNodeTranslation *translation = (struct GraphNodeTranslation *) node->next;
+        translation->translation[0] = -originX * CELL;
+        translation->translation[2] = -originZ * CELL;
+    }
     return NULL;
 }
 

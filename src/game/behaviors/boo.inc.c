@@ -1,3 +1,4 @@
+#include "game/landscape.h"
 // boo.c.inc
 
 static struct ObjectHitbox sBooGivingStarHitbox = {
@@ -126,10 +127,11 @@ void bhv_courtyard_boo_triplet_init(void) {
             sCourtyardBooTripletPositions[i][1],
             sCourtyardBooTripletPositions[i][2],
             o,
-            MODEL_BOO,
+            gCurrLevelNum == LEVEL_CASTLE_GROUNDS ? MODEL_GROUNDS_BOO : MODEL_BOO,
             bhvGhostHuntBoo
         );
         if (boo == NULL) { continue; }
+        if (o->unused1 == LANDSCAPE_HOME_ACTOR) boo->unused1 = LANDSCAPE_HOME_ACTOR;
         boo->oMoveAngleYaw = random_u16();
     }
 }

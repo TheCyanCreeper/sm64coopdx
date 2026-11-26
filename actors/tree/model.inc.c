@@ -43,7 +43,7 @@ const Gfx tree_seg3_dl_0302FEB8[] = {
 const Gfx tree_seg3_dl_0302FEE8[] = {
     gsDPPipeSync(),
     gsDPSetCombineMode(G_CC_MODULATERGBA, G_CC_MODULATERGBA),
-    gsSPClearGeometryMode(G_LIGHTING),
+    gsSPClearGeometryMode(G_LIGHTING | G_CULL_BACK),
     gsDPSetTile(G_IM_FMT_RGBA, G_IM_SIZ_16b, 0, 0, G_TX_LOADTILE, 0, G_TX_WRAP | G_TX_NOMIRROR, G_TX_NOMASK, G_TX_NOLOD, G_TX_WRAP | G_TX_NOMIRROR, G_TX_NOMASK, G_TX_NOLOD),
     gsSPTexture(0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON),
     gsDPTileSync(),
@@ -54,7 +54,7 @@ const Gfx tree_seg3_dl_0302FEE8[] = {
     gsSPTexture(0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF),
     gsDPPipeSync(),
     gsDPSetCombineMode(G_CC_SHADE, G_CC_SHADE),
-    gsSPSetGeometryMode(G_LIGHTING),
+    gsSPSetGeometryMode(G_LIGHTING | G_CULL_BACK),
     gsSPEndDisplayList(),
 };
 
@@ -68,7 +68,7 @@ ROM_ASSET_LOAD_VTX(tree_seg3_vertex_03030F60, 0x00201410, 96653, 0x00030f60, 64)
 const Gfx tree_seg3_dl_03030FA0[] = {
     gsDPPipeSync(),
     gsDPSetCombineMode(G_CC_MODULATERGBA, G_CC_MODULATERGBA),
-    gsSPClearGeometryMode(G_SHADING_SMOOTH),
+    gsSPClearGeometryMode(G_SHADING_SMOOTH | G_CULL_BACK),
     gsDPSetTile(G_IM_FMT_RGBA, G_IM_SIZ_16b, 0, 0, G_TX_LOADTILE, 0, G_TX_WRAP | G_TX_NOMIRROR, G_TX_NOMASK, G_TX_NOLOD, G_TX_WRAP | G_TX_NOMIRROR, G_TX_NOMASK, G_TX_NOLOD),
     gsSPTexture(0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON),
     gsDPTileSync(),
@@ -84,7 +84,7 @@ const Gfx tree_seg3_dl_03030FA0[] = {
     gsSPTexture(0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF),
     gsDPPipeSync(),
     gsDPSetCombineMode(G_CC_SHADE, G_CC_SHADE),
-    gsSPSetGeometryMode(G_SHADING_SMOOTH),
+    gsSPSetGeometryMode(G_SHADING_SMOOTH | G_CULL_BACK),
     gsSPEndDisplayList(),
 };
 
@@ -98,7 +98,7 @@ ROM_ASSET_LOAD_VTX(tree_seg3_vertex_03032048, 0x00201410, 96653, 0x00030f60, 64)
 const Gfx tree_seg3_dl_03032088[] = {
     gsDPPipeSync(),
     gsDPSetCombineMode(G_CC_MODULATERGBA, G_CC_MODULATERGBA),
-    gsSPClearGeometryMode(G_SHADING_SMOOTH),
+    gsSPClearGeometryMode(G_SHADING_SMOOTH | G_CULL_BACK),
     gsDPSetTile(G_IM_FMT_RGBA, G_IM_SIZ_16b, 0, 0, G_TX_LOADTILE, 0, G_TX_WRAP | G_TX_NOMIRROR, G_TX_NOMASK, G_TX_NOLOD, G_TX_WRAP | G_TX_NOMIRROR, G_TX_NOMASK, G_TX_NOLOD),
     gsSPTexture(0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON),
     gsDPTileSync(),
@@ -114,7 +114,7 @@ const Gfx tree_seg3_dl_03032088[] = {
     gsSPTexture(0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF),
     gsDPPipeSync(),
     gsDPSetCombineMode(G_CC_SHADE, G_CC_SHADE),
-    gsSPSetGeometryMode(G_SHADING_SMOOTH),
+    gsSPSetGeometryMode(G_SHADING_SMOOTH | G_CULL_BACK),
     gsSPEndDisplayList(),
 };
 
@@ -125,7 +125,7 @@ ROM_ASSET_LOAD_VTX(tree_seg3_vertex_03032130, 0x00201410, 96653, 0x00030f60, 64)
 const Gfx tree_seg3_dl_03032170[] = {
     gsDPPipeSync(),
     gsDPSetCombineMode(G_CC_MODULATERGBA, G_CC_MODULATERGBA),
-    gsSPClearGeometryMode(G_SHADING_SMOOTH),
+    gsSPClearGeometryMode(G_SHADING_SMOOTH | G_CULL_BACK),
     gsDPSetTile(G_IM_FMT_RGBA, G_IM_SIZ_16b, 0, 0, G_TX_LOADTILE, 0, G_TX_WRAP | G_TX_NOMIRROR, G_TX_NOMASK, G_TX_NOLOD, G_TX_WRAP | G_TX_NOMIRROR, G_TX_NOMASK, G_TX_NOLOD),
     gsSPTexture(0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON),
     gsDPTileSync(),
@@ -141,7 +141,7 @@ const Gfx tree_seg3_dl_03032170[] = {
     gsSPTexture(0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF),
     gsDPPipeSync(),
     gsDPSetCombineMode(G_CC_SHADE, G_CC_SHADE),
-    gsSPSetGeometryMode(G_SHADING_SMOOTH),
+    gsSPSetGeometryMode(G_SHADING_SMOOTH | G_CULL_BACK),
     gsSPEndDisplayList(),
 };
 
@@ -155,7 +155,7 @@ ROM_ASSET_LOAD_VTX(tree_seg3_vertex_03033218, 0x00201410, 96653, 0x00033218, 64)
 const Gfx tree_seg3_dl_03033258[] = {
     gsDPPipeSync(),
     gsDPSetCombineMode(G_CC_MODULATERGBA, G_CC_MODULATERGBA),
-    gsSPClearGeometryMode(G_SHADING_SMOOTH),
+    gsSPClearGeometryMode(G_SHADING_SMOOTH | G_CULL_BACK),
     gsDPSetTile(G_IM_FMT_RGBA, G_IM_SIZ_16b, 0, 0, G_TX_LOADTILE, 0, G_TX_WRAP | G_TX_NOMIRROR, G_TX_NOMASK, G_TX_NOLOD, G_TX_WRAP | G_TX_NOMIRROR, G_TX_NOMASK, G_TX_NOLOD),
     gsSPTexture(0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON),
     gsDPTileSync(),
@@ -171,6 +171,6 @@ const Gfx tree_seg3_dl_03033258[] = {
     gsSPTexture(0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF),
     gsDPPipeSync(),
     gsDPSetCombineMode(G_CC_SHADE, G_CC_SHADE),
-    gsSPSetGeometryMode(G_SHADING_SMOOTH),
+    gsSPSetGeometryMode(G_SHADING_SMOOTH | G_CULL_BACK),
     gsSPEndDisplayList(),
 };
