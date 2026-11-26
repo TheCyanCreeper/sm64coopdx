@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "sm64.h"
+#include "landscape.h"
 #include "area.h"
 #include "audio/external.h"
 #include "behavior_actions.h"
@@ -778,6 +779,7 @@ s32 mario_floor_is_slope(struct MarioState *m) {
  * Determines if a surface is steep based on the surface class.
  */
 s32 mario_floor_is_steep(struct MarioState *m) {
+    if (m && m->floor && (m->floor->flags & LANDSCAPE_HILL)) return FALSE;
     if (!m) { return FALSE; }
     if (!m->floor) { return FALSE; }
     f32 normY;

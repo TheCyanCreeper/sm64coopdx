@@ -11,3 +11,6 @@ Gfx *geo_landscape_home(s32 context, struct GraphNode *node, Mat4 matrix);
 // Area-local model slot; the stock snow-level ID is used by the castle birds.
 #define MODEL_LANDSCAPE_SPINDRIFT 0x3C
 #define MODEL_LANDSCAPE_PIRANHA 0x3D
+
+#define LANDSCAPE_HILL (1 << 4)
+Gfx *geo_landscape_rim(s32 context, struct GraphNode *node, Mat4 matrix);

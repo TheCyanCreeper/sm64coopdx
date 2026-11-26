@@ -1,6 +1,7 @@
 #include <PR/ultratypes.h>
 
 #include "sm64.h"
+#include "landscape.h"
 #include "mario.h"
 #include "audio/external.h"
 #include "engine/math_util.h"
@@ -1970,7 +1971,7 @@ s32 common_landing_cancels(struct MarioState *m, struct LandingAction *landingAc
     //! Everything here, including floor steepness, is checked before checking
     // if Mario is actually on the floor. This leads to e.g. remote sliding.
 
-    if (m->floor && m->floor->normal.y < 0.2923717f) {
+    if (m->floor && !(m->floor->flags & LANDSCAPE_HILL) && m->floor->normal.y < 0.2923717f) {
         return mario_push_off_steep_floor(m, landingAction->verySteepAction, 0);
     }
 

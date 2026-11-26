@@ -1,8 +1,8 @@
 # Castle Grounds expedition
 
-Peach's Castle and its original grounds occupy a fixed patch of the endless landscape. From Mario's usual starting spot, face away from the castle and follow the grassy rise at the back of the lawn. You can walk across the old boundary and back in the same level and area. The castle doors, moat and original actors use the stock level data.
+Peach's Castle and its original grounds occupy a fixed patch of the endless landscape. Climb the grassy banks around the lawn and walk over the crest into the wilderness. A continuous grass mesh joins the original perimeter to the streaming ground in the same area. The castle doors, moat and original actors use the stock level data.
 
-Beyond the home meadow, temperature varies over roughly 41,000-unit intervals and grove density over 24,600-unit intervals. Terrain height, textures and vegetation blend between regions. The seed fixes the locations of outcrops, groves and encounters.
+Beyond the home meadow, temperature varies over roughly 41,000-unit intervals and grove density over 24,600-unit intervals. Terrain height, textures and vegetation blend between regions. Broad landings and ridges use a slope profile sampled from the castle lawn. Steeper wilderness faces show the original outdoor rock texture. The seed fixes the locations of outcrops, groves and encounters.
 
 | Region | Scenery | Enemies |
 | --- | --- | --- |

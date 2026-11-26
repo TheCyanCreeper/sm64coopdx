@@ -36,8 +36,8 @@ void landscape_relative_position(Vec3f pos, const s64 origin[2]) {
     }
 }
 
-static Vtx vertices[3][PATCHES * 4];
-static Gfx lists[3][PATCHES * 3 + 32];
+static Vtx vertices[4][PATCHES * 4];
+static Gfx lists[4][PATCHES * 3 + 32];
 static s16 heights[ROW * ROW];
 static u8 snow[ROW * ROW];
 // The original collision, warp nodes, moat and castle actors stay resident.
@@ -78,6 +78,12 @@ static double noise(double x, double z, int scale, u32 seed) {
                 lerp(hash(a, b + 1, seed), hash(a + 1, b + 1, seed), u), v)
            / 4294967295.;
 }
+static double castleBank[9];
+static double bank_shape(double t) {
+    double i = smooth(t) * 8;
+    int j = (int) i;
+    return j == 8 ? castleBank[j] : lerp(castleBank[j], castleBank[j + 1], i - j);
+}
 struct Climate {
     double woods, sand, ice, height;
 };
@@ -88,61 +94,47 @@ static struct Climate sample(s64 x, s64 z) {
     double ice = outskirts * smooth((weather - .53) / .22);
     double sand = outskirts * smooth((.52 - weather) / .20);
     double woods = (1 - ice - sand) * smooth((noise(x, z, 48, 419) - .35) / .35) * outskirts;
-    double hills = noise(x, z, 9, 77), detail = noise(x, z, 3, 782);
-    struct Climate c = {
-        woods, sand, ice,
-        outskirts * ((hills - .45) * (1050 + ice * 1800 + sand * 530) + (detail - .5) * 180)
-    };
-    c.height += 360;
-    if (distance <= HOME + 4) {
-        int best = 26;
-        for (int j = -5; j <= 5; j++)
-            for (int i = -5; i <= 5; i++) {
-                int d = i * i + j * j;
-                if (d < best && authored(x + i, z + j))
-                    best = d;
-            }
-        if (best < 26) {
-            int sum = 0, count = 0;
-            for (int j = -5; j <= 5; j++)
-                for (int i = -5; i <= 5; i++) {
-                    if (i * i + j * j == best && authored(x + i, z + j)) {
-                        sum += homeHeight[z + j + HOME][x + i + HOME];
-                        count++;
-                    }
-                }
-            c.height = lerp((double) sum / count - 8, c.height, smooth(sqrt(best) / 5));
-        }
-        // A grass saddle climbs over the original steep south bank.
-        if (z >= 8 && z <= 20 && x >= -6 && x <= 0) {
-            double across = smooth((3 - fabs(x + 3.)) / 2.);
-            double ridge = 260 + 1430 * smooth((z - 9.) / 5.0);
-            double crest = fmax(c.height, ridge + 5);
-            // Tuck the foot below the stock lawn so the spawn point keeps its authored floor.
-            if (z <= 9)
-                crest = c.height - 26;
-            c.height = lerp(c.height, crest, across * (1 - smooth((z - 14.) / 6.)));
-        }
-    }
+    // Wide grass landings sit between low banks. Sharper shoulders and high
+    // ridgelines give the snowfields and mesas distinct platforming profiles.
+    double broad = noise(x, z, 15, 77);
+    double bench = bank_shape((noise(x, z, 7, 782) - .38) / .31);
+    double ridge = 1 - fabs(2 * noise(x, z, 19, 124) - 1);
+    struct Climate c = { woods, sand, ice,
+                         360
+                             + outskirts
+                                   * ((broad - .45) * (1280 + ice * 1950)
+                                      + (bench - .45) * (420 + 510 * sand)
+                                      + ridge * ridge * (280 + 820 * ice)) };
     return c;
 }
 static void build(void) {
     struct Climate climate[ROW * ROW];
+    double lighting[ROW * ROW];
+    u8 rock[ROW * ROW];
     for (int z = 0; z < ROW; z++)
         for (int x = 0; x < ROW; x++) {
             int k = z * ROW + x;
             climate[k] = sample(centerX + x - SIDE / 2, centerZ + z - SIDE / 2);
+            s64 wx = centerX + x - SIDE / 2, wz = centerZ + z - SIDE / 2;
+            double sx = (sample(wx + 1, wz).height - sample(wx - 1, wz).height) / (2 * CELL);
+            double sz = (sample(wx, wz + 1).height - sample(wx, wz - 1).height) / (2 * CELL);
+            lighting[k] =
+                .64 + .36 * fmax(0, (.82 - .48 * sx - .31 * sz) / sqrt(1 + sx * sx + sz * sz));
+            rock[k] = 215 * smooth((hypot(sx, sz) - .32) / .38);
             heights[k] = lround(climate[k].height);
             snow[k] = climate[k].ice > .65;
         }
 
-    for (int pass = 0; pass < 3; pass++) {
+    for (int pass = 0; pass < 4; pass++) {
         Gfx *dl = lists[pass];
         gDPPipeSync(dl++);
         gSPClearGeometryMode(dl++, G_LIGHTING);
         gDPSetCombineMode(dl++, G_CC_MODULATERGBA, G_CC_MODULATERGBA);
         gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_ON);
-        const u8 *texture = pass == 2 ? outside_09003800 : pass == 1 ? snow_09008800 : generic_09002800;
+        const u8 *texture = pass == 3   ? outside_0900A800
+                            : pass == 2 ? outside_09003800
+                            : pass == 1 ? snow_09008800
+                                        : generic_09002800;
         gDPLoadTextureBlock(dl++, texture, G_IM_FMT_RGBA, G_IM_SIZ_16b, 32, 32, 0, G_TX_WRAP, G_TX_WRAP,
                             5, 5, G_TX_NOLOD, G_TX_NOLOD);
         for (int z = 0; z < SIDE; z++)
@@ -158,8 +150,7 @@ static void build(void) {
                     delete_surface(g->tri[1]);
                     g->tri[0] = g->tri[1] = NULL;
                 }
-                if (authored(wx, wz) && authored(wx + 1, wz) && authored(wx, wz + 1)
-                    && authored(wx + 1, wz + 1) && !(wz >= 8 && wz < 18 && wx >= -6 && wx < 0))
+                if (wx >= -HOME && wx < HOME && wz >= -HOME && wz < HOME)
                     continue;
                 Vec3s p[4];
                 int visible = 0;
@@ -169,11 +160,12 @@ static void build(void) {
                     p[corner][0] = (wx + dx - originX) * CELL;
                     p[corner][1] = heights[n];
                     p[corner][2] = (wz + dz - originZ) * CELL;
-                    double shade = .89 + .11 * noise(wx + dx, wz + dz, 3, 144);
+                    double shade = lighting[n];
                     int r = pass == 2 ? 255 - 87 * c.woods : 255;
                     int g = pass == 2 ? 255 - 47 * c.woods : 255;
                     int b = pass == 2 ? 255 - 65 * c.woods : 255;
-                    int alpha = pass == 2   ? 255 * (1 - c.ice - c.sand)
+                    int alpha = pass == 3   ? rock[n]
+                                : pass == 2 ? 255 * (1 - c.ice - c.sand)
                                 : pass == 1 ? 255 * smooth(c.ice * 8)
                                             : 255;
                     visible |= alpha;
@@ -220,8 +212,11 @@ static void place(struct Site *s, int slot, int model, const BehaviorScript *bhv
     if (authored(x, z))
         return;
     int lx = (x - originX) * CELL, lz = (z - originZ) * CELL;
-    struct Object *o = spawn_object_abs_with_rot(gMarioObject, 0, model, bhv, lx,
-                                                 lround(sample(x, z).height), lz, 0, hash(x, z, 5), 0);
+    float y = !originX && !originZ && llabs(x) <= HOME && llabs(z) <= HOME
+                  ? find_floor_height(lx, 12000, lz)
+                  : sample(x, z).height;
+    struct Object *o =
+        spawn_object_abs_with_rot(gMarioObject, 0, model, bhv, lx, lround(y), lz, 0, hash(x, z, 5), 0);
     if (o) {
         // Sites stream independently on each client; their local coordinates differ after a rebase.
         o->coopFlags |= COOP_OBJ_FLAG_NON_SYNC;
@@ -297,12 +292,139 @@ static void populate(int shiftX, int shiftZ) {
         }
 }
 
+// Join the irregular authored boundary to the first regular wilderness grid row.
+// Each radial strip starts just inside the original floor. Its far edge lies
+// exactly on the grid, including the interpolated heights between grid vertices.
+enum { EDGE_STEPS = HOME * 4, RIM_POINTS = 4 * EDGE_STEPS, RIM_ROWS = 4 };
+static Vec3s rim[RIM_POINTS][RIM_ROWS + 1];
+static Vtx rimVertices[RIM_POINTS * RIM_ROWS * 4];
+static Gfx rimList[RIM_POINTS * RIM_ROWS * 2 + 32];
+
+static bool stock_floor(float x, float z, float *height) {
+    struct Surface *floor = NULL;
+    *height = find_floor(x, 12000, z, &floor);
+    return floor && floor->type != SURFACE_DEATH_PLANE;
+}
+
+static void prepare_home_collision(void) {
+    for (int z = 0; z < NUM_CELLS; z++)
+        for (int x = 0; x < NUM_CELLS; x++) {
+            for (struct SurfaceNode *n = gStaticSurfacePartition[z][x][SPATIAL_PARTITION_FLOORS].next;
+                 n; n = n->next) {
+                struct Surface *f = n->surface;
+                if (f->type == SURFACE_VERY_SLIPPERY || f->type == SURFACE_NOISE_DEFAULT
+                    || f->type == SURFACE_NOISE_SLIPPERY) {
+                    f->type = SURFACE_NOT_SLIPPERY;
+                    f->flags |= LANDSCAPE_HILL;
+                }
+            }
+            for (struct SurfaceNode *n = gStaticSurfacePartition[z][x][SPATIAL_PARTITION_WALLS].next; n;
+                 n = n->next) {
+                struct Surface *f = n->surface;
+                if (f->flags & SURFACE_FLAG_INTANGIBLE)
+                    continue;
+                float px = (f->vertex1[0] + f->vertex2[0] + f->vertex3[0]) / 3.f;
+                float pz = (f->vertex1[2] + f->vertex2[2] + f->vertex3[2]) / 3.f;
+                if (fmaxf(fabsf(px), fabsf(pz)) < 5400)
+                    continue;
+                float y;
+                if (!stock_floor(px + 32 * f->normal.x, pz + 32 * f->normal.z, &y)
+                    || !stock_floor(px - 32 * f->normal.x, pz - 32 * f->normal.z, &y))
+                    f->flags |= SURFACE_FLAG_INTANGIBLE;
+            }
+        }
+}
+
+static void build_home_rim(void) {
+    for (int i = 0; i < RIM_POINTS; i++) {
+        int along = (i % EDGE_STEPS) * CELL / 2 - HOME * CELL, side = i / EDGE_STEPS;
+        int edgeX = side == 0 ? along : side == 1 ? HOME * CELL : side == 2 ? -along : -HOME * CELL;
+        int edgeZ = side == 0 ? -HOME * CELL : side == 1 ? along : side == 2 ? HOME * CELL : -along;
+        float length = hypotf(edgeX, edgeZ), ux = edgeX / length, uz = edgeZ / length;
+        float edge = length, h = 260;
+        while (edge > 128 && !stock_floor(edge * ux, edge * uz, &h))
+            edge -= 48;
+        float lo = edge, hi = edge + 48;
+        for (int j = 0; j < 8; j++) {
+            float mid = (lo + hi) * .5f;
+            if (stock_floor(mid * ux, mid * uz, &h))
+                lo = mid;
+            else
+                hi = mid;
+        }
+        edge = lo;
+        // The northeast bank has a sheer step above the low path. Extend
+        // the visible grass upslope from the path to the lip in this sector.
+        double approach = uz < 0 ? smooth(1 - fabs(ux - .54) / .14) : 0;
+        float inner = edge - 96 - 2600 * approach, innerY = 260, edgeY = 260;
+        stock_floor(inner * ux, inner * uz, &innerY);
+        stock_floor((edge - 3) * ux, (edge - 3) * uz, &edgeY);
+        int gx = (int) floor((double) edgeX / CELL), gz = (int) floor((double) edgeZ / CELL);
+        double u = (double) edgeX / CELL - gx, v = (double) edgeZ / CELL - gz;
+        double farY =
+            lerp(lerp(lround(sample(gx, gz).height), lround(sample(gx + 1, gz).height), u),
+                 lerp(lround(sample(gx, gz + 1).height), lround(sample(gx + 1, gz + 1).height), u), v);
+        for (int j = 0; j <= RIM_ROWS; j++) {
+            double t = j ? (j - 1.) / (RIM_ROWS - 1) : 0;
+            double r = j ? lerp(edge, length, t) : inner;
+            rim[i][j][0] = lround(ux * r);
+            rim[i][j][2] = lround(uz * r);
+            rim[i][j][1] = lround(j ? lerp(edgeY - 2, farY, t) : innerY - 4);
+        }
+    }
+    Gfx *dl = rimList;
+    gDPPipeSync(dl++);
+    gSPClearGeometryMode(dl++, G_LIGHTING);
+    gDPSetCombineMode(dl++, G_CC_MODULATERGBA, G_CC_MODULATERGBA);
+    gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_ON);
+    gDPLoadTextureBlock(dl++, outside_09003800, G_IM_FMT_RGBA, G_IM_SIZ_16b, 32, 32, 0, G_TX_WRAP,
+                        G_TX_WRAP, 5, 5, G_TX_NOLOD, G_TX_NOLOD);
+    for (int i = 0; i < RIM_POINTS; i++)
+        for (int j = 0; j < RIM_ROWS; j++) {
+            int next = (i + 1) % RIM_POINTS, base = (i * RIM_ROWS + j) * 4;
+            Vec3s *p[4] = { &rim[i][j], &rim[next][j], &rim[i][j + 1], &rim[next][j + 1] };
+            for (int k = 0; k < 4; k++) {
+                s16 *v = *p[k];
+                int shade = 215 + 20 * noise(v[0] / (double) CELL, v[2] / (double) CELL, 3, 144);
+                make_vertex(rimVertices, base + k, v[0], v[1], v[2],
+                            (((*p[0])[0] * 4) & 1023) + (v[0] - (*p[0])[0]) * 4,
+                            (((*p[0])[2] * 4) & 1023) + (v[2] - (*p[0])[2]) * 4, shade, shade, shade,
+                            255);
+            }
+            smlua_collision_add_surface(false, SURFACE_NOT_SLIPPERY, *p[0], *p[1], *p[2]);
+            smlua_collision_add_surface(false, SURFACE_NOT_SLIPPERY, *p[1], *p[3], *p[2]);
+            gSPVertex(dl++, &rimVertices[base], 4, 0);
+            gSP2Triangles(dl++, 0, 1, 2, 0, 1, 3, 2, 0);
+        }
+    gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_OFF);
+    gSPSetGeometryMode(dl++, G_LIGHTING);
+    gDPSetCombineMode(dl++, G_CC_SHADE, G_CC_SHADE);
+    gSPEndDisplayList(dl++);
+}
+Gfx *geo_landscape_rim(s32 context, struct GraphNode *node, UNUSED Mat4 mtx) {
+    if (context != GEO_CONTEXT_RENDER)
+        return NULL;
+    node->flags = (node->flags & 0xff) | (LAYER_OPAQUE << 8);
+    return rimList;
+}
+
 void landscape_load(s32 area) {
     if (gCurrLevelNum != LEVEL_CASTLE_GROUNDS || area != 1)
         return;
     originX = originZ = centerX = centerZ = 0;
     memset(ground, 0, sizeof(ground));
     memset(sites, 0, sizeof(sites));
+    prepare_home_collision();
+    // Sample the stock lawn-to-crest profile before adding the perimeter mesh.
+    float bank[9];
+    bool valid = true;
+    for (int i = 0; i < 9; i++)
+        valid &= stock_floor(-1328, 4700 + 250 * i, &bank[i]);
+    for (int i = 0; i < 9; i++)
+        castleBank[i] = valid && bank[8] > bank[0] + 1
+                            ? fmax(0, fmin(1, (bank[i] - bank[0]) / (bank[8] - bank[0])))
+                            : i / 8.;
+
     for (int z = -HOME; z <= HOME; z++)
         for (int x = -HOME; x <= HOME; x++) {
             struct Surface *floor = NULL;
@@ -310,6 +432,7 @@ void landscape_load(s32 area) {
             homeHeight[z + HOME][x + HOME] =
                 floor && floor->type != SURFACE_DEATH_PLANE ? (s16) y : -11000;
         }
+    build_home_rim();
     build();
 }
 
