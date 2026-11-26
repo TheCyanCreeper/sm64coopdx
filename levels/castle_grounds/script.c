@@ -7,10 +7,16 @@
 #include "level_commands.h"
 
 #include "game/level_update.h"
+#include "game/landscape.h"
 
 #include "levels/scripts.h"
 
 #include "actors/common1.h"
+#include "actors/group7.h"
+#include "actors/group14.h"
+#include "levels/hmc/header.h"
+#include "levels/ccm/header.h"
+#include "levels/ssl/header.h"
 
 #include "make_const_nonconst.h"
 #include "levels/castle_grounds/header.h"
@@ -117,14 +123,16 @@ const LevelScript level_castle_grounds_entry[] = {
     LOAD_MODEL_FROM_GEO(MODEL_CASTLE_GROUNDS_FLAG,         castle_grounds_geo_000660),
     LOAD_MODEL_FROM_GEO(MODEL_CASTLE_GROUNDS_CANNON_GRILL, castle_grounds_geo_000724),
 
+    LOAD_MODEL_FROM_GEO(MODEL_SSL_PYRAMID_TOP, ssl_geo_000618),
+    LOAD_MODEL_FROM_GEO(MODEL_CCM_SNOWMAN_BASE, ccm_geo_0003F0),
+    LOAD_MODEL_FROM_GEO(MODEL_HMC_ROLLING_ROCK, hmc_geo_000548),
+    LOAD_MODEL_FROM_GEO(MODEL_LANDSCAPE_PIRANHA, piranha_plant_geo),
+    LOAD_MODEL_FROM_GEO(MODEL_LANDSCAPE_SPINDRIFT, spindrift_geo),
     LOAD_MODEL_FROM_GEO(MODEL_CCM_SNOW_TREE, snow_tree_geo),
     LOAD_MODEL_FROM_GEO(MODEL_SSL_PALM_TREE, palm_tree_geo),
 
     AREA(/*index*/ 1, castle_grounds_geo_00073C),
         WARP_NODE(/*id*/ 0xF1, /*destLevel*/ LEVEL_CASTLE_GROUNDS, /*destArea*/ 0x01, /*destNode*/ 0x03, /*flags*/ WARP_NO_CHECKPOINT),
-        INSTANT_WARP(0, 2, 1328, -260, -5150),
-        OBJECT(MODEL_CASTLE_GROUNDS_BUBBLY_TREE, -1590, 260, 5150, 0, 0, 0, 0, bhvTree),
-        OBJECT(MODEL_CASTLE_GROUNDS_BUBBLY_TREE, -1066, 260, 5150, 0, 0, 0, 0, bhvTree),
         JUMP_LINK(script_func_local_1),
         JUMP_LINK(script_func_local_2),
         JUMP_LINK(script_func_local_3),
@@ -133,12 +141,6 @@ const LevelScript level_castle_grounds_entry[] = {
         MACRO_OBJECTS(/*objList*/ castle_grounds_seg7_macro_objs),
         SET_BACKGROUND_MUSIC(/*settingsPreset*/ 0x0000, /*seq*/ SEQ_SOUND_PLAYER),
         TERRAIN_TYPE(/*terrainType*/ TERRAIN_GRASS),
-    END_AREA(),
-
-    AREA(2, castle_landscape_geo),
-        INSTANT_WARP(0, 1, -1328, 260, 5150),
-        SET_BACKGROUND_MUSIC(0, SEQ_LEVEL_GRASS),
-        TERRAIN_TYPE(TERRAIN_GRASS),
     END_AREA(),
 
     FREE_LEVEL_POOL(),

@@ -236,7 +236,7 @@ void network_send_player(u8 localIndex) {
     packet_init(&p, PACKET_PLAYER, false, PLMT_AREA);
     packet_write(&p, &gNetworkPlayers[localIndex].globalIndex, sizeof(u8));
     packet_write(&p, &data, sizeof(struct PacketPlayerData));
-    if (gCurrLevelNum == LEVEL_CASTLE_GROUNDS && gCurrAreaIndex == 2) {
+    if (gCurrLevelNum == LEVEL_CASTLE_GROUNDS && gCurrAreaIndex == 1) {
         s64 origin[2];
         landscape_get_origin(origin);
         packet_write(&p, origin, sizeof(origin));
@@ -304,7 +304,7 @@ void network_receive_player(struct Packet* p) {
                       &riddenSyncID, &interactSyncID,
                       &usedSyncID, &platformSyncID);
 
-    if (gCurrLevelNum == LEVEL_CASTLE_GROUNDS && gCurrAreaIndex == 2) {
+    if (gCurrLevelNum == LEVEL_CASTLE_GROUNDS && gCurrAreaIndex == 1) {
         s64 origin[2] = {0};
         packet_read(p, origin, sizeof(origin));
         landscape_relative_position(m->pos, origin);

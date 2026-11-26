@@ -3,6 +3,7 @@
 #include "sm64.h"
 #include "game/debug.h"
 #include "game/level_update.h"
+#include "level_table.h"
 #include "game/mario.h"
 #include "game/object_list_processor.h"
 #include "surface_collision.h"
@@ -618,8 +619,12 @@ static struct Surface *find_floor_from_list(struct SurfaceNode *surfaceNode, s32
     struct Surface *floor = NULL;
     s32 interpolate;
 
+    // The castle border blends two meshes. A lower stock floor may be first in the partition.
+    const bool highestFloor = gLevelValues.fixCollisionBugs
+        || (gCurrLevelNum == LEVEL_CASTLE_GROUNDS && gCurrAreaIndex == 1);
+
     // set pheight to lowest value
-    if (gLevelValues.fixCollisionBugs) {
+    if (highestFloor) {
         *pheight = gLevelValues.floorLowerLimit;
     }
 
@@ -741,7 +746,7 @@ static struct Surface *find_floor_from_list(struct SurfaceNode *surfaceNode, s32
         height = -(x * nx + nz * z + oo) / ny;
 
         // Find highest floor
-        if (gLevelValues.fixCollisionBugs && (height < *pheight)) {
+        if (highestFloor && (height < *pheight)) {
             continue;
         }
 
@@ -766,14 +771,14 @@ static struct Surface *find_floor_from_list(struct SurfaceNode *surfaceNode, s32
 
         floor = surf;
 
-        if (!gLevelValues.fixCollisionBugs) {
+        if (!highestFloor) {
             break;
         }
     }
 
     //! (Surface Cucking) Since only the first floor is returned and not the highest,
     //  higher floors can be "cucked" by lower floors.
-    //  <Fixed when gLevelValues.fixCollisionBugs != 0>
+    //  <Fixed when highestFloor is enabled>
     return floor;
 }
 

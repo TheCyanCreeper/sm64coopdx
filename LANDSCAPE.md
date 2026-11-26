@@ -1,9 +1,18 @@
 # Castle Grounds expedition
 
-This fork adds a second outdoor area to Peach's Castle. From Mario's usual starting spot on the grass, turn away from the castle and walk between the two closely spaced bubbly trees. Stepping through the gap uses the game's instant-warp floor and carries Mario's movement into the meadow. The return crossing lies behind the arrival point, between the trees on the southern edge of the clearing.
+Peach's Castle and its original grounds occupy a fixed patch of the endless landscape. From Mario's usual starting spot, face away from the castle and follow the grassy rise at the back of the lawn. You can walk across the old boundary and back in the same level and area. The castle doors, moat and original actors use the stock level data.
 
-Walk in any direction. Rolling meadows blend into groves, sandy hills with palms, and higher snowy ridges with pine trees and slippery ground. A fixed seed makes revisiting a place repeatable. The renderer uses the game's grass, sand and snow textures, tree models, skybox, and vertex shading. Mario's movement and camera run through CoopDX.
+Beyond the home meadow, temperature varies over roughly 41,000-unit intervals and grove density over 24,600-unit intervals. Terrain height, textures and vegetation blend between regions. The seed fixes the locations of outcrops, groves and encounters.
 
-On this Windows checkout, run **Play Landscape.cmd**, then host a game and select a save. CoopDX uses the US ROM in your existing CoopDX profile. Other players need this fork for the new area.
+| Region | Scenery | Enemies |
+| --- | --- | --- |
+| Meadow | Bubbly trees and scattered rocks | Goombas |
+| Woodland | Denser tree cover, butterflies and outcrops | Piranha Plants |
+| Sandy hills | Palms, boulders and pyramid caps | Fly Guys |
+| Snow ridges | Snowy pines, snowballs and exposed rock | Spindrifts |
 
-To rebuild from an MSYS2 MinGW64 shell, run `make -j8` in the repository root. The executable is `build/us_pc/sm64coopdx.exe`.
+The central grounds are safe from generated encounters. Outside that buffer, each block of four sites can hold one enemy, with a maximum of nine encounter sites in the loaded window. Sites stay populated while nearby, so crossing a streaming boundary keeps surviving enemies in place.
+
+On Windows, run **Play Landscape.cmd**, then host a game and select a save. On first launch the script copies the US ROM from your existing CoopDX profile into `landscape-profile` beside the launcher. The expedition starts with fresh save slots and stores its progress there between launches. Other players need this fork for the expedition. Terrain and encounter sites are deterministic across clients. Each client simulates the enemies in its own loaded window, so enemy defeats are local in this prototype.
+
+To rebuild from an MSYS2 MinGW64 shell, run `make -j8 EXE=build/us_pc/castle-expedition.exe` in the repository root. The executable is `build/us_pc/castle-expedition.exe`.

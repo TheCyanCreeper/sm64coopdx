@@ -207,6 +207,7 @@ UNUSED static void unused_delete_leaf_nodes(struct Object *obj) {
  */
 void unload_object(struct Object *obj) {
     if (!obj) { return; }
+    obj->unused1 = 0; // Release the landscape site tag before this slot is reused.
     obj->activeFlags = ACTIVE_FLAG_DEACTIVATED;
     obj->prevObj = NULL;
 
