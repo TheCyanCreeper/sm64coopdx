@@ -1505,6 +1505,7 @@ static struct MarioBodyState *get_mario_body_state_from_mario_object(struct Obje
  * Process an object node.
  */
 static void geo_process_object(struct Object *node) {
+    if (landscape_hide_home_actor(node)) return;
     struct Object* lastProcessingObject = gCurGraphNodeProcessingObject;
     struct MarioState* lastMarioState = gCurGraphNodeMarioState;
     gCurGraphNodeProcessingObject = node;

@@ -1,3 +1,4 @@
+#include "game/landscape.h"
 #include <PR/ultratypes.h>
 
 #include "sm64.h"
@@ -934,6 +935,7 @@ f32 find_water_level(f32 x, f32 z) {
         }
     }
 
+    waterLevel = landscape_water_level(x, z, waterLevel);
     smlua_call_event_hooks(HOOK_ON_FIND_WATER_LEVEL, x, z, &waterLevel);
 
     return waterLevel;

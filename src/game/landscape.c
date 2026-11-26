@@ -40,14 +40,14 @@ void landscape_relative_position(Vec3f pos, const s64 origin[2]) {
 
 static Vtx vertices[4][PATCHES * 4];
 static Gfx lists[4][PATCHES * 3 + 32];
-static s16 heights[ROW * ROW];
-static u8 snow[ROW * ROW];
+static s16 heights[ROW * ROW], waterHeights[ROW * ROW];
+enum { WATER_Y = 80, ROCK_SIDES = 6, ROCK_FACES = ROCK_SIDES * 3 };
 // The original collision, warp nodes, moat and castle actors stay resident.
 // Only triangles owned by the wilderness streamer may be retired.
 struct GroundCell {
     s64 x, z;
     s16 localX, localZ;
-    struct Surface *tri[2];
+    struct Surface *tri[2], *rock[ROCK_FACES];
 };
 static struct GroundCell ground[PATCHES];
 static s64 centerX, centerZ;
@@ -87,8 +87,12 @@ static double bank_shape(double t) {
     return j == 8 ? castleBank[j] : lerp(castleBank[j], castleBank[j + 1], i - j);
 }
 struct Climate {
-    double woods, sand, ice, height;
+    double woods, sand, ice, height, mountain, waterY;
 };
+static double river_distance(double x, double z) {
+    double warp = 32 * (noise(x, z, 37, 376) - .5) + 8 * (noise(x, z, 11, 87) - .5);
+    return fabs(remainder(x + warp - 31, 67));
+}
 static struct Climate sample(s64 x, s64 z) {
     double distance = fmax(fabs((double) x), fabs((double) z));
     double outskirts = smooth((distance - 16) / 18);
@@ -98,6 +102,7 @@ static struct Climate sample(s64 x, s64 z) {
     double woods = (1 - ice - sand) * smooth((noise(x, z, 48, 419) - .35) / .35) * outskirts;
     // Wide grass landings sit between low banks. Sharper shoulders and high
     // ridgelines give the snowfields and mesas distinct platforming profiles.
+    double mountain = smooth((distance - 22) / 20) * smooth((noise(x, z, 51, 8609) - .54) / .25);
     double broad = noise(x, z, 15, 77);
     double bench = bank_shape((noise(x, z, 7, 782) - .38) / .31);
     double ridge = 1 - fabs(2 * noise(x, z, 19, 124) - 1);
@@ -107,6 +112,46 @@ static struct Climate sample(s64 x, s64 z) {
                                    * ((broad - .45) * (1280 + ice * 1950)
                                       + (bench - .45) * (420 + 510 * sand)
                                       + ridge * ridge * (280 + 820 * ice)) };
+    double spine = 1 - fabs(2 * noise(x, z, 12, 2478) - 1);
+    c.mountain = mountain;
+    c.height += outskirts * (210 * (noise(x, z, 5, 192) - .5) + 260 * spine * spine)
+                + mountain * (700 + 3500 * spine * spine + 1800 * broad);
+    // A warped family of continuous valleys feeds a common water elevation.
+    // Basin radius and frequency follow moisture, with small isolated desert oases.
+    double moisture = 1 - .82 * sand;
+    double riverDist = river_distance(x, z);
+    double width = (1.6 + 1.9 * moisture) * (1 - .3 * mountain);
+    double channel = smooth(1 - riverDist / (width + 3.8));
+    double basin = 0, uplift = 0;
+    s64 bx = (s64) floor((x + 16.) / 32), bz = (s64) floor((z + 16.) / 32);
+    u32 lake = hash(bx, bz, 3217);
+    double cx = 32. * bx + ((int) ((lake >> 8) & 7) - 3),
+           cz = 32. * bz + ((int) ((lake >> 12) & 7) - 3);
+    double basinMoisture = 1 - .82 * smooth((.52 - noise(cx, cz, 80, 32421)) / .20);
+    if ((lake & 255) < 45 + 150 * basinMoisture) {
+        double radius = (2.6 + ((lake >> 16) & 7) * .85) * (.55 + .45 * basinMoisture);
+        double ellipse =
+            hypot((x - cx) / radius, (z - cz) / (radius * (.68 + .04 * ((lake >> 24) & 7))));
+        basin = smooth(1 - ellipse / 1.55);
+        if (ellipse < 1.55) {
+            double alpine = smooth((noise(cx, cz, 51, 8609) - .55) / .24);
+            uplift = 1650 * alpine * smooth((river_distance(cx, cz) - 19) / 7)
+                     * smooth((1.55 - ellipse) / .55) * smooth((fmax(fabs(cx), fabs(cz)) - 38) / 12);
+        }
+    }
+    double carve = fmax(channel, basin);
+    double dry = WATER_Y + 85 + 150 * log1p(exp((c.height - WATER_Y - 85) / 150));
+    // Lower the surrounding valley in stages so a stream through mountains
+    // has banks and approach slopes as well as a submerged bed.
+    double valley = smooth(1 - riverDist / (width + 10));
+    double bank = lerp(dry, fmin(dry, WATER_Y + 460), valley);
+    c.height =
+        lerp(c.height, lerp(bank, WATER_Y - 530 - 250 * basin, carve), smooth((distance - 25) / 9));
+    double snowline = smooth((c.height - 3100) / 1900) * c.mountain;
+    c.ice = lerp(c.ice, 1, snowline);
+    c.sand *= 1 - snowline;
+    c.waterY = WATER_Y + uplift;
+    c.height += uplift;
     double pad = smooth((10 - fabs((double) x)) / 3) * smooth((-z - 14.) / 2) * smooth((29. + z) / 4);
     c.height = lerp(c.height, COURT_Y - 232, pad);
     return c;
@@ -119,9 +164,12 @@ struct TerrainVertex {
 static struct TerrainVertex terrain_vertex(s64 x, s64 z) {
     double sx = (sample(x + 1, z).height - sample(x - 1, z).height) / (2 * CELL);
     double sz = (sample(x, z + 1).height - sample(x, z - 1).height) / (2 * CELL);
+    struct Climate climate = sample(x, z);
     return (struct TerrainVertex) {
-        sample(x, z), .64 + .36 * fmax(0, (.82 - .48 * sx - .31 * sz) / sqrt(1 + sx * sx + sz * sz)),
-        215 * smooth((hypot(sx, sz) - .32) / .38)
+        climate, .64 + .36 * fmax(0, (.82 - .48 * sx - .31 * sz) / sqrt(1 + sx * sx + sz * sz)),
+        fmax(190 * climate.mountain * smooth((climate.height - 700) / 1700),
+             215 * smooth((hypot(sx, sz) - .32) / .38))
+            * (1 - .65 * climate.ice)
     };
 }
 static int paint_vertex(Vtx *v, Vec3s pos, int u, int t, int pass, const struct TerrainVertex *point) {
@@ -150,6 +198,15 @@ enum {
 static Vtx backVertices[4][BACK_COUNT][40];
 static Gfx backTiles[4][BACK_COUNT][21], backList[4][BACK_COUNT + 32];
 static u8 backVisible[4][BACK_COUNT];
+static Vtx backWaterVertices[BACK_COUNT][TILE * TILE * 8];
+static Gfx backWaterTiles[BACK_COUNT][TILE * TILE * 4 + 1], backWaterList[BACK_COUNT + 32];
+static bool backWet[BACK_COUNT];
+static Gfx *backWaterScroll;
+extern u8 texture_waterbox_water[];
+static Gfx *water_cell(Gfx *dl, Vtx *verts, int x, int z, const double h[4], const double level[4]);
+static Gfx *feature_begin(Gfx *dl, const u8 *texture, bool clamp);
+static void feature_end(Gfx *dl);
+
 static void build_backdrop(void) {
     for (int tz = 0; tz < BACK_SIDE; tz++)
         for (int tx = 0; tx < BACK_SIDE; tx++) {
@@ -160,6 +217,20 @@ static void build_backdrop(void) {
             for (int dz = 0; dz <= TILE; dz++)
                 for (int dx = 0; dx <= TILE; dx++)
                     grid[dz][dx] = terrain_vertex(x + dx, z + dz);
+            Gfx *water = backWaterTiles[tile];
+            for (int dz = 0; dz < TILE; dz++)
+                for (int dx = 0; dx < TILE; dx++) {
+                    double h[4], level[4];
+                    for (int i = 0; i < 4; i++) {
+                        struct Climate c = grid[dz + (i >> 1)][dx + (i & 1)].climate;
+                        h[i] = lround(c.height);
+                        level[i] = lround(c.waterY);
+                    }
+                    water = water_cell(water, &backWaterVertices[tile][8 * (TILE * dz + dx)],
+                                       (x + dx) * CELL, (z + dz) * CELL, h, level);
+                }
+            backWet[tile] = water != backWaterTiles[tile];
+            gSPEndDisplayList(water++);
             for (int pass = 0; pass < 4; pass++) {
                 Gfx *dl = backTiles[pass][tile];
                 int visible = 0;
@@ -181,6 +252,8 @@ static void build_backdrop(void) {
         }
 }
 static void select_backdrop(void) {
+    Gfx *water = feature_begin(backWaterList, texture_waterbox_water, false);
+    backWaterScroll = water++;
     for (int pass = 0; pass < 4; pass++) {
         Gfx *dl = backList[pass];
         gDPPipeSync(dl++);
@@ -197,6 +270,8 @@ static void select_backdrop(void) {
                     && z < centerZ + SIDE / 2)
                     continue;
                 int tile = tz * BACK_SIDE + tx;
+                if (!pass && backWet[tile])
+                    gSPDisplayList(water++, backWaterTiles[tile]);
                 if (backVisible[pass][tile])
                     gSPDisplayList(dl++, backTiles[pass][tile]);
             }
@@ -205,14 +280,248 @@ static void select_backdrop(void) {
         gDPSetCombineMode(dl++, G_CC_SHADE, G_CC_SHADE);
         gSPEndDisplayList(dl++);
     }
+    feature_end(water);
 }
 Gfx *geo_landscape_backdrop(s32 context, struct GraphNode *node, UNUSED Mat4 matrix) {
     if (context != GEO_CONTEXT_RENDER)
         return NULL;
     int pass = ((struct GraphNodeGenerated *) node)->parameter;
+    if (pass == 4) {
+        node->flags = (node->flags & 255) | (LAYER_TRANSPARENT_INTER << 8);
+        if (backWaterScroll) {
+            int scroll = gGlobalTimer & 127;
+            gDPSetTileSize(backWaterScroll, G_TX_RENDERTILE, scroll, 0, scroll + 124, 124);
+        }
+        return backWaterList;
+    }
     node->flags = (node->flags & 0xff) | ((pass ? LAYER_TRANSPARENT_DECAL : LAYER_OPAQUE) << 8);
     return backList[pass];
 }
+// Solid scenery is part of the same rolling collision partition as the ground.
+enum { FEATURE_SITES = (SIDE / 4) * (SIDE / 4), BLOOMS = 7 };
+static Vtx rockVertices[FEATURE_SITES * ROCK_FACES * 3], flowerVertices[FEATURE_SITES * BLOOMS * 8];
+static Vtx sprigs[FEATURE_SITES * BLOOMS * 6];
+static Gfx stemList[FEATURE_SITES * BLOOMS * 2 + 16];
+static Gfx rockList[2 * FEATURE_SITES * ROCK_FACES + 32], flowerList[4 * FEATURE_SITES * BLOOMS + 32];
+extern u8 wiggler_seg5_texture_05008230[];
+static Vtx waterVertices[PATCHES * 8];
+static Gfx waterList[4 * PATCHES + 32];
+static Gfx *waterScroll;
+
+static double triangle_height(const double h[4], double u, double v) {
+    if (u + v <= 1)
+        return h[0] + u * (h[1] - h[0]) + v * (h[2] - h[0]);
+    return h[3] + (1 - u) * (h[2] - h[3]) + (1 - v) * (h[1] - h[3]);
+}
+f32 landscape_water_level(f32 x, f32 z, f32 existing) {
+    if (gCurrLevelNum != LEVEL_CASTLE_GROUNDS || gCurrAreaIndex != 1)
+        return existing;
+    double gx = x / CELL, gz = z / CELL;
+    s64 wx = originX + (s64) floor(gx), wz = originZ + (s64) floor(gz);
+    if (llabs(wx) <= HOME && llabs(wz) <= HOME)
+        return existing;
+    s64 ix = wx - centerX + SIDE / 2, iz = wz - centerZ + SIDE / 2;
+    double h[4], level[4];
+    for (int i = 0; i < 4; i++) {
+        int dx = i & 1, dz = i >> 1;
+        if (ix >= 0 && ix < SIDE && iz >= 0 && iz < SIDE) {
+            int k = (iz + dz) * ROW + ix + dx;
+            h[i] = heights[k];
+            level[i] = waterHeights[k];
+        } else {
+            struct Climate c = sample(wx + dx, wz + dz);
+            h[i] = lround(c.height);
+            level[i] = lround(c.waterY);
+        }
+    }
+    double u = gx - floor(gx), v = gz - floor(gz), water = triangle_height(level, u, v);
+    return triangle_height(h, u, v) < water ? water : existing;
+}
+static Gfx *feature_begin(Gfx *dl, const u8 *texture, bool clamp) {
+    gDPPipeSync(dl++);
+    gSPClearGeometryMode(dl++, G_LIGHTING | G_CULL_BACK);
+    gDPSetCombineMode(dl++, G_CC_MODULATERGBA, G_CC_MODULATERGBA);
+    gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_ON);
+    int wrap = clamp ? G_TX_CLAMP : G_TX_WRAP;
+    gDPLoadTextureBlock(dl++, texture, G_IM_FMT_RGBA, G_IM_SIZ_16b, 32, 32, 0, wrap, wrap, 5, 5,
+                        G_TX_NOLOD, G_TX_NOLOD);
+    return dl;
+}
+static void feature_end(Gfx *dl) {
+    gSPTexture(dl++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_OFF);
+    gSPSetGeometryMode(dl++, G_LIGHTING | G_CULL_BACK);
+    gDPSetCombineMode(dl++, G_CC_SHADE, G_CC_SHADE);
+    gSPEndDisplayList(dl++);
+}
+// Clip each water polygon on the very same diagonal used by Mario's floor.
+static Gfx *water_cell(Gfx *dl, Vtx *verts, int x, int z, const double h[4], const double level[4]) {
+    const int corners[2][3] = { { 0, 2, 1 }, { 1, 2, 3 } };
+    for (int t = 0; t < 2; t++) {
+        int count = 0;
+        for (int k = 0; k < 3; k++) {
+            int a = corners[t][k], b = corners[t][(k + 1) % 3];
+            double u = a & 1, v = a >> 1;
+            if (h[a] < level[a]) {
+                make_vertex(verts, count++, x + u * CELL, level[a], z + v * CELL, u * 1024, v * 1024,
+                            134, 207, 232, 174);
+            }
+            if ((h[a] < level[a]) != (h[b] < level[b])) {
+                double f = (level[a] - h[a]) / (h[b] - level[b] - h[a] + level[a]);
+                u = lerp(u, b & 1, f);
+                v = lerp(v, b >> 1, f);
+                make_vertex(verts, count++, x + lround(u * CELL), lround(lerp(level[a], level[b], f)),
+                            z + lround(v * CELL), lround(u * 1024), lround(v * 1024), 157, 219, 230,
+                            174);
+            }
+        }
+        if (count >= 3) {
+            gSPVertex(dl++, verts, count, 0);
+            if (count == 4) {
+                gSP2Triangles(dl++, 0, 1, 2, 0, 0, 2, 3, 0);
+            } else {
+                gSP1Triangle(dl++, 0, 1, 2, 0);
+            }
+        }
+        verts += 4;
+    }
+    return dl;
+}
+static Gfx *rock_face(Gfx *dl, Vtx *v, struct Surface **collision, Vec3s a, Vec3s b, Vec3s c,
+                      int shade) {
+    if (!*collision)
+        *collision = smlua_collision_add_surface(false, SURFACE_NOT_SLIPPERY, a, b, c);
+    // Planar mapping keeps the grain continuous across adjacent side triangles.
+    s16 *p[3] = { a, b, c };
+    double nx = (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]);
+    double ny = (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]);
+    double nz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    int u = fabs(nx) > fabs(nz) ? 2 : 0, t = fabs(ny) > fmax(fabs(nx), fabs(nz)) ? (u == 2 ? 0 : 2) : 1;
+    for (int i = 0; i < 3; i++) {
+        int uv = ((a[u] * 4) & 1023) + (p[i][u] - a[u]) * 4;
+        int tv = ((a[t] * 4) & 1023) + (p[i][t] - a[t]) * 4;
+        make_vertex(v, i, p[i][0], p[i][1], p[i][2], uv, tv, shade, shade, shade, 255);
+    }
+    gSPVertex(dl++, v, 3, 0);
+    gSP1Triangle(dl++, 0, 1, 2, 0);
+    return dl;
+}
+static Gfx *boulder(Gfx *dl, int site, struct GroundCell *cell, const double groundY[4], u32 seed) {
+    Vec3s base[ROCK_SIDES], shoulder[ROCK_SIDES];
+    int cx = cell->localX + CELL / 2, cz = cell->localZ + CELL / 2;
+    double radius = 65 + (seed & 127), wide = .53 + ((seed >> 8) & 63) / 120.,
+           height = radius * (.40 + ((seed >> 16) & 127) / 145.);
+    double groundCenter = triangle_height(groundY, .5, .5);
+    Vec3s peak = { cx + (int) (radius * .17), lround(groundCenter + height), cz };
+    for (int i = 0; i < ROCK_SIDES; i++) {
+        u32 r = hash(cell->x, cell->z, seed + i);
+        double angle = (i + (seed % 73) / 73. + (r & 31) / 160.) * 6.283185307 / ROCK_SIDES;
+        double extent = radius * (.82 + ((r >> 8) & 31) / 140.);
+        double dx = cos(angle) * extent, dz = sin(angle) * extent * wide;
+        base[i][0] = cx + lround(dx);
+        base[i][2] = cz + lround(dz);
+        base[i][1] = lround(triangle_height(groundY, .5 + dx / CELL, .5 + dz / CELL)) - 25;
+        shoulder[i][0] = cx + lround(dx * .83);
+        shoulder[i][2] = cz + lround(dz * .83);
+        shoulder[i][1] = lround(groundCenter + height * (.56 + ((r >> 16) & 31) / 155.));
+    }
+    for (int i = 0; i < ROCK_SIDES; i++) {
+        int j = (i + 1) % ROCK_SIDES, f = 3 * i;
+        int shade = 161 + 32 * cos((i + .2) * 6.283185307 / ROCK_SIDES);
+        Vtx *v = &rockVertices[(site * ROCK_FACES + f) * 3];
+        dl = rock_face(dl, v, &cell->rock[f], base[i], shoulder[i], base[j], shade);
+        dl = rock_face(dl, v + 3, &cell->rock[f + 1], base[j], shoulder[i], shoulder[j], shade + 5);
+        dl = rock_face(dl, v + 6, &cell->rock[f + 2], shoulder[i], peak, shoulder[j], shade + 35);
+    }
+    return dl;
+}
+static void build_features(const struct TerrainVertex *points) {
+    Gfx *water = feature_begin(waterList, texture_waterbox_water, false);
+    waterScroll = water++;
+    Gfx *rocks = feature_begin(rockList, generic_09002000, false);
+    Gfx *stems = stemList;
+    gDPPipeSync(stems++);
+    gSPClearGeometryMode(stems++, G_LIGHTING | G_CULL_BACK);
+    gDPSetCombineMode(stems++, G_CC_SHADE, G_CC_SHADE);
+    gSPTexture(stems++, 0xffff, 0xffff, 0, G_TX_RENDERTILE, G_OFF);
+    Gfx *flowers = feature_begin(flowerList, wiggler_seg5_texture_05008230, true);
+    for (int z = 0; z < SIDE; z++)
+        for (int x = 0; x < SIDE; x++) {
+            s64 wx = centerX + x - SIDE / 2, wz = centerZ + z - SIDE / 2;
+            if (wx >= -HOME && wx < HOME && wz >= -HOME && wz < HOME)
+                continue;
+            int k = z * ROW + x, lx = (wx - originX) * CELL, lz = (wz - originZ) * CELL;
+            double h[4] = { heights[k], heights[k + 1], heights[k + ROW], heights[k + ROW + 1] };
+            double level[4] = { waterHeights[k], waterHeights[k + 1], waterHeights[k + ROW],
+                                waterHeights[k + ROW + 1] };
+            water = water_cell(water, &waterVertices[(z * SIDE + x) * 8], lx, lz, h, level);
+            if (fmin(fmin(h[0] - level[0], h[1] - level[1]), fmin(h[2] - level[2], h[3] - level[3]))
+                <= 12)
+                continue;
+            int site = (z / 4) * (SIDE / 4) + x / 4;
+            u32 seed = hash((wx - (x % 4)) / 4, (wz - (z % 4)) / 4, 671);
+            if ((x % 4) != (int) ((seed >> 10) & 3) || (z % 4) != (int) ((seed >> 14) & 3))
+                continue;
+            struct Climate c = points[k].climate;
+            if ((seed & 255) < 42 + 125 * c.mountain + 35 * c.ice + 24 * c.sand) {
+                int rx = (wx % SIDE + SIDE) % SIDE, rz = (wz % SIDE + SIDE) % SIDE;
+                rocks = boulder(rocks, site, &ground[rz * SIDE + rx], h, seed);
+            } else if (c.woods < .48 && c.sand < .45 && c.ice < .45 && c.mountain < .42
+                       && ((seed >> 19) & 3) != 0) {
+                for (int bloom = 0; bloom < BLOOMS; bloom++) {
+                    u32 r = hash(wx, wz, seed + bloom);
+                    double u = .12 + (r & 255) / 340., v = .12 + ((r >> 8) & 255) / 340.;
+                    int px = lx + lround(CELL * u), pz = lz + lround(CELL * v),
+                        py = lround(triangle_height(h, u, v));
+                    int size = 14 + ((r >> 16) & 15);
+                    Vtx *leaf = &sprigs[(site * BLOOMS + bloom) * 6];
+                    make_vertex(leaf, 0, px - 3, py - 2, pz, 0, 0, 43, 109, 29, 255);
+                    make_vertex(leaf, 1, px + 3, py - 2, pz + 2, 0, 0, 59, 131, 36, 255);
+                    make_vertex(leaf, 2, px + 2, py + size + 6, pz, 0, 0, 80, 156, 47, 255);
+                    make_vertex(leaf, 3, px, py + 4, pz, 0, 0, 52, 115, 25, 255);
+                    make_vertex(leaf, 4, px - size, py + size / 2, pz + 4, 0, 0, 90, 154, 34, 255);
+                    make_vertex(leaf, 5, px - 4, py + size / 2, pz + 6, 0, 0, 59, 131, 36, 255);
+                    gSPVertex(stems++, leaf, 6, 0);
+                    gSP2Triangles(stems++, 0, 1, 2, 0, 3, 4, 5, 0);
+                    Vtx *verts = &flowerVertices[(site * BLOOMS + bloom) * 8];
+                    for (int axis = 0; axis < 2; axis++) {
+                        for (int n = 0; n < 4; n++) {
+                            int side = (n & 1) ? size : -size;
+                            make_vertex(verts, 4 * axis + n, px + (axis ? 0 : side),
+                                        py + size / 2 + (n >> 1) * size * 2, pz + (axis ? side : 0),
+                                        (n & 1) * 992, (1 - (n >> 1)) * 992, 255, 245, 219, 255);
+                        }
+                        gSPVertex(flowers++, &verts[4 * axis], 4, 0);
+                        gSP2Triangles(flowers++, 0, 1, 2, 0, 2, 1, 3, 0);
+                    }
+                }
+            }
+        }
+    feature_end(water);
+    feature_end(rocks);
+    feature_end(flowers);
+    gSPSetGeometryMode(stems++, G_LIGHTING | G_CULL_BACK);
+    gSPEndDisplayList(stems++);
+}
+Gfx *geo_landscape_features(s32 context, struct GraphNode *node, UNUSED Mat4 matrix) {
+    if (context != GEO_CONTEXT_RENDER)
+        return NULL;
+    int pass = ((struct GraphNodeGenerated *) node)->parameter;
+    node->flags = (node->flags & 255)
+                  | ((pass == 0   ? LAYER_OPAQUE
+                      : pass == 1 ? LAYER_ALPHA
+                                  : LAYER_TRANSPARENT_INTER)
+                     << 8);
+    if (pass == 3) {
+        node->flags = (node->flags & 255) | (LAYER_OPAQUE << 8);
+        return stemList;
+    }
+    if (pass == 2 && waterScroll) {
+        int scroll = gGlobalTimer & 127;
+        gDPSetTileSize(waterScroll, G_TX_RENDERTILE, scroll, 0, scroll + 124, 124);
+    }
+    return pass == 0 ? rockList : pass == 1 ? flowerList : waterList;
+}
+
 static void build(void) {
     select_backdrop();
     struct TerrainVertex points[ROW * ROW];
@@ -221,7 +530,7 @@ static void build(void) {
             int k = z * ROW + x;
             points[k] = terrain_vertex(centerX + x - SIDE / 2, centerZ + z - SIDE / 2);
             heights[k] = lround(points[k].climate.height);
-            snow[k] = points[k].climate.ice > .65;
+            waterHeights[k] = lround(points[k].climate.waterY);
         }
     for (int pass = 0; pass < 4; pass++) {
         Gfx *dl = lists[pass];
@@ -241,6 +550,10 @@ static void build(void) {
                 int localX = (wx - originX) * CELL, localZ = (wz - originZ) * CELL;
                 if (!pass && g->tri[0]
                     && (g->x != wx || g->z != wz || g->localX != localX || g->localZ != localZ)) {
+                    for (int t = 0; t < ROCK_FACES; t++) {
+                        delete_surface(g->rock[t]);
+                        g->rock[t] = NULL;
+                    }
                     delete_surface(g->tri[0]);
                     delete_surface(g->tri[1]);
                     g->tri[0] = g->tri[1] = NULL;
@@ -262,9 +575,12 @@ static void build(void) {
                     g->z = wz;
                     g->localX = localX;
                     g->localZ = localZ;
-                    s16 surface = snow[k] ? SURFACE_NOISE_SLIPPERY : SURFACE_NOT_SLIPPERY;
+                    s16 surface = SURFACE_NOT_SLIPPERY;
                     g->tri[0] = smlua_collision_add_surface(false, surface, p[0], p[2], p[1]);
                     g->tri[1] = smlua_collision_add_surface(false, surface, p[1], p[2], p[3]);
+                    for (int t = 0; t < 2; t++)
+                        if (g->tri[t])
+                            g->tri[t]->flags |= LANDSCAPE_WILD_SLOPE;
                 }
                 if (!visible)
                     continue;
@@ -276,6 +592,7 @@ static void build(void) {
         gDPSetCombineMode(dl++, G_CC_SHADE, G_CC_SHADE);
         gSPEndDisplayList(dl++);
     }
+    build_features(points);
 }
 
 enum { BLOCKS = 6, SLOTS = 3 };
@@ -293,7 +610,9 @@ static bool live(struct Site *s, int i) {
 }
 static void place(struct Site *s, int slot, int model, const BehaviorScript *bhv, s64 x, s64 z,
                   float scale) {
-    if (authored(x, z) || (llabs(x) < 14 && z >= -25 && z <= -14))
+    struct Climate climate = sample(x, z);
+    if (climate.height < climate.waterY + 20 || authored(x, z)
+        || (llabs(x) < 14 && z >= -25 && z <= -14))
         return;
     int lx = (x - originX) * CELL, lz = (z - originZ) * CELL;
     float y = !originX && !originZ && llabs(x) <= HOME && llabs(z) <= HOME
@@ -337,23 +656,20 @@ static void populate(int shiftX, int shiftZ) {
             u32 h = hash(bx, bz, 9147);
             s64 x = bx * 4 + ((h >> 8) & 3), z = bz * 4 + ((h >> 12) & 3);
             struct Climate c = sample(x, z);
-            if ((h & 255) < 85 + 150 * c.woods - 50 * c.sand)
+            if ((h & 255) < 85 + 150 * c.woods - 50 * c.sand - 65 * c.mountain)
                 place(s, 0,
-                      c.ice > .55    ? MODEL_CCM_SNOW_TREE
-                      : c.sand > .55 ? MODEL_SSL_PALM_TREE
-                                     : MODEL_CASTLE_GROUNDS_BUBBLY_TREE,
+                      c.ice > .55 || c.mountain > .55 ? MODEL_CCM_SNOW_TREE
+                      : c.sand > .55                  ? MODEL_SSL_PALM_TREE
+                                                      : MODEL_CASTLE_GROUNDS_BUBBLY_TREE,
                       bhvTree, x, z, 1);
             s64 rx = bx * 4 + ((h >> 17) & 3), rz = bz * 4 + ((h >> 20) & 3);
             if ((h >> 24) < 85 + 70 * (c.sand + c.ice)) {
-                if (c.woods > .35 && (h & 1))
+                if (c.ice < .4 && c.sand < .45 && c.mountain < .45)
                     place(s, 1, MODEL_BUTTERFLY, bhvButterfly, rx, rz, 1);
                 else if (c.ice > .65 && (h & 1))
                     place(s, 1, MODEL_CCM_SNOWMAN_BASE, bhvStaticObject, rx, rz, .48);
                 else if (c.sand > .65 && (h & 3) == 0)
                     place(s, 1, MODEL_SSL_PYRAMID_TOP, bhvStaticObject, rx, rz, .32);
-                else
-                    place(s, 1, MODEL_HMC_ROLLING_ROCK, bhvStaticObject, rx, rz,
-                          .18 + .5 * ((h >> 6) & 15) / 15.);
             }
             // One possible encounter in each group of four sites, giving at most nine
             // in the entire active window. The broad home meadow stays safe.
@@ -361,7 +677,7 @@ static void populate(int shiftX, int shiftZ) {
                 && fmax(llabs(x), llabs(z)) > 22) {
                 int model = MODEL_GOOMBA;
                 const BehaviorScript *behavior = bhvGoomba;
-                if (c.ice > .5) {
+                if (c.ice > .5 || (c.mountain > .65 && c.height > 2100)) {
                     model = MODEL_LANDSCAPE_SPINDRIFT;
                     behavior = bhvSpindrift;
                 } else if (c.sand > .5) {
@@ -768,6 +1084,14 @@ void landscape_anchor_actor(Mat4 matrix, Mat4 parent) {
     float z = fmax(-100000., fmin(100000., (double) originZ * CELL));
     for (int i = 0; i < 3; i++)
         matrix[3][i] -= x * parent[0][i] + z * parent[2][i];
+}
+
+bool landscape_hide_home_actor(const struct Object *o) {
+    if (o->unused1 != LANDSCAPE_HOME_ACTOR || !gMarioState)
+        return false;
+    double dx = (double) originX * CELL + gMarioState->pos[0] - o->oPosX;
+    double dz = (double) originZ * CELL + gMarioState->pos[2] - o->oPosZ;
+    return dx * dx + dz * dz > 10500. * 10500.;
 }
 
 Gfx *geo_landscape_home_offset(s32 context, struct GraphNode *node, UNUSED Mat4 matrix) {

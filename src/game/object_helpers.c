@@ -1,3 +1,4 @@
+#include "landscape.h"
 #include <PR/ultratypes.h>
 
 #include "sm64.h"
@@ -717,6 +718,7 @@ struct Object *spawn_object_at_origin(struct Object *parent, UNUSED s32 unusedAr
     if (obj == NULL) { return NULL; }
 
     obj->parentObj = parent;
+    if (parent && parent->unused1 == LANDSCAPE_HOME_ACTOR) obj->unused1 = LANDSCAPE_HOME_ACTOR;
     if (parent) {
         obj->header.gfx.areaIndex = parent->header.gfx.areaIndex;
         obj->header.gfx.activeAreaIndex = parent->header.gfx.areaIndex;

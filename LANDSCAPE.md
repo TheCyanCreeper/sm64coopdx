@@ -6,10 +6,13 @@ Beyond the home meadow, temperature varies over roughly 41,000-unit intervals an
 
 | Region | Scenery | Enemies |
 | --- | --- | --- |
-| Meadow | Bubbly trees and scattered rocks | Goombas |
+| Meadow | Bubbly trees, flower patches, butterflies and ponds | Goombas |
 | Woodland | Denser tree cover, butterflies and outcrops | Piranha Plants |
-| Sandy hills | Palms, boulders and pyramid caps | Fly Guys |
+| Sandy hills | Palms, boulders, pyramid caps and occasional small oases | Fly Guys |
 | Snow ridges | Snowy pines, snowballs and exposed rock | Spindrifts |
+| Mountain | Rock ridgelines, sparse pines, narrow river valleys and alpine basins | Spindrifts on high peaks, local biome enemies below |
+
+Rivers follow winding valleys. Larger basins form in wetter regions. Water surfaces meet the carved terrain and Mario can swim in deeper sections. Boulders are static pieces of textured collision geometry. Generated banks allow uphill walking to 42 degrees before the usual steep-slope check takes over.
 
 The central grounds are safe from generated encounters. Outside that buffer, each block of four sites can hold one enemy, with a maximum of nine encounter sites in the loaded window. Sites stay populated while nearby, so crossing a streaming boundary keeps surviving enemies in place.
 

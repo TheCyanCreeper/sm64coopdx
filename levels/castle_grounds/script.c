@@ -15,7 +15,6 @@
 #include "actors/group7.h"
 #include "actors/group9.h"
 #include "actors/group14.h"
-#include "levels/hmc/header.h"
 #include "levels/ccm/header.h"
 #include "levels/ssl/header.h"
 
@@ -126,7 +125,6 @@ const LevelScript level_castle_grounds_entry[] = {
 
     LOAD_MODEL_FROM_GEO(MODEL_SSL_PYRAMID_TOP, ssl_geo_000618),
     LOAD_MODEL_FROM_GEO(MODEL_CCM_SNOWMAN_BASE, ccm_geo_0003F0),
-    LOAD_MODEL_FROM_GEO(MODEL_HMC_ROLLING_ROCK, hmc_geo_000548),
     LOAD_MODEL_FROM_GEO(MODEL_LANDSCAPE_PIRANHA, piranha_plant_geo),
     LOAD_MODEL_FROM_GEO(MODEL_LANDSCAPE_SPINDRIFT, spindrift_geo),
     LOAD_MODEL_FROM_GEO(MODEL_CCM_SNOW_TREE, snow_tree_geo),

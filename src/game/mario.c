@@ -780,6 +780,7 @@ s32 mario_floor_is_slope(struct MarioState *m) {
  */
 s32 mario_floor_is_steep(struct MarioState *m) {
     if (m && m->floor && (m->floor->flags & LANDSCAPE_HILL)) return FALSE;
+    if (m && m->floor && (m->floor->flags & LANDSCAPE_WILD_SLOPE) && m->floor->normal.y >= 0.743145f) return FALSE; // 42 degrees
     if (!m) { return FALSE; }
     if (!m->floor) { return FALSE; }
     f32 normY;

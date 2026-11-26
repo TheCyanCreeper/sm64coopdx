@@ -21,5 +21,10 @@ void landscape_anchor_actor(Mat4 matrix, Mat4 parent);
 Gfx *geo_landscape_home_offset(s32 context, struct GraphNode *node, Mat4 matrix);
 Gfx *geo_landscape_court_path(s32 context, struct GraphNode *node, Mat4 matrix);
 #define LANDSCAPE_HILL (1 << 4)
+#define LANDSCAPE_WILD_SLOPE (1 << 5)
 Gfx *geo_landscape_backdrop(s32 context, struct GraphNode *node, Mat4 matrix);
 Gfx *geo_landscape_rim(s32 context, struct GraphNode *node, Mat4 matrix);
+
+bool landscape_hide_home_actor(const struct Object *o);
+f32 landscape_water_level(f32 x, f32 z, f32 existing);
+Gfx *geo_landscape_features(s32 context, struct GraphNode *node, Mat4 matrix);
